@@ -86,7 +86,7 @@ export function SongPicker({ open, onClose, onPick }: { open: boolean; onClose: 
         {results.map((t) => {
           const playing = p.url === t.previewUrl && p.playing;
           return (
-            <div key={t.trackId} className="flex items-center gap-3 rounded-2xl px-1.5 py-1.5 hover:bg-surface-2">
+            <div key={t.trackId} className="flex min-w-0 items-center gap-2.5 rounded-2xl py-1.5 pr-0.5 pl-1 hover:bg-surface-2">
               <button className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-primary-soft" onClick={() => player.toggle(t.previewUrl!)} aria-label={`Preview ${t.trackName}`}>
                 {t.artworkUrl100 && <img src={t.artworkUrl100} alt="" className="h-full w-full object-cover" loading="lazy" />}
                 <span className="absolute inset-0 grid place-items-center bg-black/25 text-white">{playing ? <Bars /> : <Icon name="play" size={16} />}</span>
@@ -96,7 +96,7 @@ export function SongPicker({ open, onClose, onPick }: { open: boolean; onClose: 
                 <span className="block truncate text-xs text-muted">{t.artistName}</span>
               </span>
               <button
-                className="btn btn-soft btn-sm shrink-0"
+                className="btn btn-soft !h-8 shrink-0 !px-3.5 !text-[13px]"
                 onClick={() => {
                   player.stop();
                   onPick(toSong(t));
