@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NivoTalk</string>
+    <string name="title_activity_main">NivoTalk</string>
+    <string name="package_name">com.nivotalk.app</string>
+    <string name="custom_url_scheme">com.nivotalk.app</string>
+</resources>

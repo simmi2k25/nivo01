@@ -1,0 +1,28 @@
+# Render Blueprint — one web service serves the API, the real-time socket and the built website.
+# Data lives in Neon Postgres (set DATABASE_URL in the Render dashboard; it is never committed).
+services:
+  - type: web
+    name: nivotalk
+    runtime: node
+    region: singapore
+    plan: free
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false # paste your Neon connection string when creating the service
+      - key: JWT_SECRET
+        generateValue: true
+      - key: TURN_URL
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

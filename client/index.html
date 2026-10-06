@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#F2F5FE" />
+    <meta name="description" content="NivoTalk — a cute messenger with a built-in multiplayer photobooth. Snap. Smile. Share." />
+    <title>NivoTalk</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/icons/favicon-64.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Pacifico&display=swap"
+    />
+    <style>
+      /* Boot loader — visible before any JavaScript runs (and while a sleeping server wakes up). */
+      html, body { margin: 0; background: #f2f5fe; }
+      @media (prefers-color-scheme: dark) { html.auto-dark, html.auto-dark body { background: #151a33; } }
+      #boot { position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; font-family: Nunito, system-ui, sans-serif; color: #232c5c; background: #f2f5fe; transition: opacity .35s ease; }
+      #boot.gone { opacity: 0; pointer-events: none; }
+      #boot .wrap { display: grid; justify-items: center; gap: 14px; }
+      #boot .ring { position: relative; width: 92px; height: 92px; display: grid; place-items: center; }
+      #boot .ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 3px solid #e4e9fb; border-top-color: #6f84de; animation: boot-spin 1s linear infinite; }
+      #boot img { width: 70px; height: 70px; border-radius: 50%; box-shadow: 0 6px 20px rgba(90, 111, 208, .25); }
+      #boot .dots { display: flex; gap: 6px; }
+      #boot .dots i { width: 7px; height: 7px; border-radius: 50%; background: #6f84de; animation: boot-bounce 1s ease-in-out infinite; }
+      #boot .dots i:nth-child(2) { animation-delay: .15s; } #boot .dots i:nth-child(3) { animation-delay: .3s; }
+      #boot .msg { text-align: center; opacity: 0; animation: boot-show .5s ease 3s forwards; }
+      #boot .msg b { display: block; font-size: 15px; }
+      #boot .msg span { font-size: 12.5px; color: #6b76a8; }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @keyframes boot-bounce { 0%, 100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-6px); opacity: 1; } }
+      @keyframes boot-show { to { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { #boot .ring::before, #boot .dots i { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="wrap">
+        <div class="ring"><img src="/brand/badge-256.png" alt="NivoTalk" /></div>
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="msg"><b>Waking up NivoTalk…</b><span>This takes a few seconds after a quiet spell</span></div>
+      </div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
