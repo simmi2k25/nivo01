@@ -39,7 +39,7 @@ export function Sheet({
             </button>
           </div>
         )}
-        <div className="scroll-thin safe-bottom min-h-0 flex-1 overflow-y-auto px-5 pt-2 pb-5">{children}</div>
+        <div className="scroll-thin safe-bottom min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-5 pt-2 pb-5">{children}</div>
       </div>
     </div>,
     document.body,
