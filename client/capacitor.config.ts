@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 // The Android app is a shell around the live site, so every web deploy updates the app without reinstalling.
 // Set NIVOTALK_URL when syncing if your Render URL differs.
-const LIVE_URL = process.env.NIVOTALK_URL || 'https://nivotalk.onrender.com';
+const LIVE_URL = process.env.NIVOTALK_URL || 'https://nivotalk01.onrender.com';
 
 const config: CapacitorConfig = {
   appId: 'com.nivotalk.app',

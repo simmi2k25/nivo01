@@ -63,7 +63,7 @@ Optional: `TURN_URL`, `TURN_USERNAME`, `TURN_CREDENTIAL` add a TURN relay for st
 ## Android app
 
 The app loads the live site, so web deploys update it without reinstalling. If your Render URL is not
-`https://nivotalk.onrender.com`, set it when syncing:
+`https://nivotalk01.onrender.com`, set it when syncing:
 
 ```bash
 NIVOTALK_URL=https://your-app.onrender.com npm run android:apk -w client

@@ -9,3 +9,4 @@ client/android/local.properties
 .DS_Store
 tools/_*.png
 *.tsbuildinfo
+*.apk

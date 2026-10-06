@@ -100,7 +100,7 @@ export default function BoothHome() {
           <p className="mt-1 text-muted">Open a room, invite up to 3 friends, and everyone’s camera snaps together into one strip.</p>
 
           <Option icon="camera" title="Shots" hint="Number of photos per person">
-            <div className="segmented">
+            <div className="segmented shrink-0 [&>button]:!min-w-[34px] [&>button]:!px-2">
               {SHOTS.map((v) => (
                 <button key={v} aria-pressed={shots === v} onClick={() => setShots(v)}>
                   {v}
@@ -109,7 +109,7 @@ export default function BoothHome() {
             </div>
           </Option>
           <Option icon="clock" title="Countdown" hint="Time before the photo">
-            <div className="segmented">
+            <div className="segmented shrink-0 [&>button]:!min-w-[34px] [&>button]:!px-2">
               {TIMERS.map((v) => (
                 <button key={v} aria-pressed={countdown === v} onClick={() => setCountdown(v)}>
                   {v}s
@@ -195,7 +195,7 @@ function Option({ icon, title, hint, children }: { icon: 'camera' | 'clock'; tit
       </span>
       <span className="min-w-0 flex-1">
         <span className="block font-bold">{title}</span>
-        <span className="block text-xs text-muted">{hint}</span>
+        <span className="block text-xs leading-snug text-muted">{hint}</span>
       </span>
       {children}
     </div>

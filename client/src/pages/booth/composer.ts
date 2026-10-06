@@ -185,7 +185,23 @@ export async function composeStrip(canvas: HTMLCanvasElement, shots: Shots, o: S
       ctx.fillStyle = '#dfe5fb';
       ctx.fillRect(r.x, r.y, r.w, r.h);
       ctx.filter = filter;
-      tiles(r, frames.length).forEach((t, k) => drawCover(ctx, frames[k], t));
+      tiles(r, frames.length).forEach((t, k) => {
+        // Clip each person's photo to their own tile so a cover-scaled frame can't spill onto a neighbour.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(t.x, t.y, t.w, t.h);
+        ctx.clip();
+        drawCover(ctx, frames[k], t);
+        ctx.restore();
+      });
+      if (frames.length > 1) {
+        // thin divider between people sharing a cell
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        for (const t of tiles(r, frames.length)) {
+          if (t.x > r.x) ctx.fillRect(t.x - 1.5, t.y, 3, t.h);
+          if (t.y > r.y) ctx.fillRect(t.x, t.y - 1.5, t.w, 3);
+        }
+      }
       ctx.filter = 'none';
       if (o.filter === 'glow') {
         const g = ctx.createRadialGradient(r.x + r.w / 2, r.y + r.h / 2, r.h * 0.2, r.x + r.w / 2, r.y + r.h / 2, r.w * 0.75);

@@ -10,9 +10,11 @@ export async function hideNativeSplash() {
 }
 
 /** The deployed site (set VITE_PUBLIC_URL at build time if your Render URL differs). */
-export const LIVE_URL = (import.meta.env.VITE_PUBLIC_URL as string | undefined) || 'https://nivotalk.onrender.com';
+export const LIVE_URL = (import.meta.env.VITE_PUBLIC_URL as string | undefined) || 'https://nivotalk01.onrender.com';
 
 export function publicOrigin() {
-  // Inside the Android app the page may be served from capacitor://localhost — links must use the live site.
-  return isNative() ? LIVE_URL : window.location.origin;
+  // The Android app normally loads the live site itself; only a bundled copy (capacitor://localhost or
+  // https://localhost) needs the live address for links and QR codes.
+  const local = window.location.hostname === 'localhost' && isNative();
+  return local ? LIVE_URL : window.location.origin;
 }
