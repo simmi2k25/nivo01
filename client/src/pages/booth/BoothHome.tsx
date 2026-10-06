@@ -166,7 +166,7 @@ export default function BoothHome() {
         {mine.length > 0 && (
           <section className="anim-rise delay-3 mt-4">
             <h2 className="px-1 pb-2 text-xs font-bold tracking-wide text-faint uppercase">Your open rooms</h2>
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 gap-2">
               {mine.map((r) => (
                 <button key={r.code} onClick={() => nav(`/booth/${r.code}`)} className="card flex items-center gap-3 !rounded-2xl px-4 py-3 text-left">
                   <Icon name="camera" className="text-primary" />

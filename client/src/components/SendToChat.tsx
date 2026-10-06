@@ -25,7 +25,7 @@ export function SendToChat({ open, onClose, photoId, defaultConversationId }: { 
         <Icon name="edit" size={18} className="text-faint" />
         <input placeholder="Add a caption (optional)" value={caption} maxLength={300} onChange={(e) => setCaption(e.target.value)} />
       </label>
-      <div className="mt-2 grid gap-0.5">
+      <div className="mt-2 grid grid-cols-1 gap-0.5">
         {sorted.length === 0 && <p className="py-6 text-center text-sm text-muted">No chats yet — start one from Friends.</p>}
         {sorted.map((c) => (
           <div key={c.id} className="flex items-center gap-3 rounded-2xl px-2 py-2 hover:bg-surface-2">

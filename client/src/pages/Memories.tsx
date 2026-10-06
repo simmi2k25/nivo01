@@ -78,7 +78,7 @@ export default function Memories() {
 
       <Sheet open={!!open} onClose={() => setOpen(null)} title="Strip">
         {open && (
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <img src={open.url} alt="Photo strip" className="mx-auto max-h-[58dvh] rounded-2xl object-contain shadow" />
             <div className="grid grid-cols-3 gap-2">
               <button className="btn btn-soft btn-sm" onClick={async () => downloadImage(await blobOf(open), `nivotalk-strip-${open.id}.jpg`)}>

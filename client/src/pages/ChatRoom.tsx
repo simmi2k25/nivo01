@@ -174,7 +174,7 @@ function ChatMenu({ conv, me, open, onClose }: { conv: Conversation; me: User; o
           </button>
         </>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {conv.isGroup && (
             <form
               className="flex gap-2"
@@ -435,7 +435,7 @@ function PhotoViewer({ m, onClose }: { m: Message | null; onClose: () => void })
   return (
     <Sheet open={!!m} onClose={onClose} title="Photo strip">
       {m && (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <img src={`/api/photos/${m.meta.photoId}`} alt="Photo strip" className="mx-auto max-h-[62dvh] rounded-2xl object-contain shadow" />
           {m.body && <p className="text-center">{m.body}</p>}
           <button className="btn btn-soft w-full" onClick={download}>

@@ -82,7 +82,7 @@ export function SongPicker({ open, onClose, onPick }: { open: boolean; onClose: 
       </label>
       {state === 'error' && <p className="py-4 text-center text-sm text-danger">Couldn’t reach Apple Music — try again.</p>}
       {!q && <p className="py-8 text-center text-sm text-muted">Tap a cover to hear a preview, then pick your song 🎵</p>}
-      <div className="mt-2 grid gap-1">
+      <div className="mt-2 grid grid-cols-1 gap-1">
         {results.map((t) => {
           const playing = p.url === t.previewUrl && p.playing;
           return (
@@ -96,7 +96,7 @@ export function SongPicker({ open, onClose, onPick }: { open: boolean; onClose: 
                 <span className="block truncate text-xs text-muted">{t.artistName}</span>
               </span>
               <button
-                className="btn btn-soft btn-sm"
+                className="btn btn-soft btn-sm shrink-0"
                 onClick={() => {
                   player.stop();
                   onPick(toSong(t));

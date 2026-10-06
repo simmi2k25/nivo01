@@ -215,7 +215,7 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
           </span>
         </button>
 
-        <div className="mt-4 grid gap-2">
+        <div className="mt-4 grid grid-cols-1 gap-2">
           <input
             value={name}
             maxLength={30}
@@ -255,7 +255,7 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
       <input ref={avatarInput} type="file" accept="image/*" hidden onChange={(e) => (pickImage('avatar', e.target.files?.[0]), (e.target.value = ''))} />
 
       <Sheet open={photoSheet} onClose={() => setPhotoSheet(false)} title="Photo & buddy">
-        <div className="grid gap-2">
+        <div className="grid grid-cols-1 gap-2">
           <button className="btn btn-primary w-full" onClick={() => (setPhotoSheet(false), avatarInput.current?.click())}>
             <Icon name="image" size={19} /> Choose a photo
           </button>
@@ -302,7 +302,7 @@ function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }
   const [bubble, setBubble] = useState(getPref('bubble', 'periwinkle'));
   return (
     <Sheet open={open} onClose={onClose} title="Settings">
-      <div className="grid gap-5">
+      <div className="grid grid-cols-1 gap-5">
         <div>
           <p className="mb-2 text-sm font-bold text-muted">Appearance</p>
           <div className="segmented w-full">

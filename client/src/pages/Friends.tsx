@@ -144,7 +144,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="mt-3">
       <h2 className="px-3 pb-1 text-xs font-bold tracking-wide text-faint uppercase">{title}</h2>
-      <div className="grid gap-0.5">{children}</div>
+      <div className="grid grid-cols-1 gap-0.5">{children}</div>
     </section>
   );
 }

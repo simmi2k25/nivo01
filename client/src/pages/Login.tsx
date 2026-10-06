@@ -138,7 +138,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-3">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-3">
       <label className="field">
         <Icon name="mail" size={19} className="text-faint" />
         <input
@@ -234,7 +234,7 @@ function SignupForm({ onSwitch }: { onSwitch: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-2.5">
+    <form onSubmit={submit} className="grid grid-cols-1 gap-2.5">
       <div>
         <label className="field">
           <span className="font-bold text-faint">@</span>

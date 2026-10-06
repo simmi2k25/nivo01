@@ -170,7 +170,7 @@ function ConversationList({ activeId }: { activeId: number | null }) {
 
 function ListSkeleton() {
   return (
-    <div className="grid gap-1 px-1">
+    <div className="grid grid-cols-1 gap-1 px-1">
       {[0, 1, 2, 3, 4].map((i) => (
         <div key={i} className="flex items-center gap-3 px-3 py-2.5" style={{ opacity: 1 - i * 0.16 }}>
           <span className="h-[52px] w-[52px] rounded-full bg-primary-soft" />
@@ -197,7 +197,7 @@ export function FriendPicker({ selected, onToggle, exclude = [] }: { selected: n
         <Icon name="search" size={18} className="text-faint" />
         <input placeholder="Search friends" value={q} onChange={(e) => setQ(e.target.value)} />
       </label>
-      <div className="mt-2 grid gap-0.5">
+      <div className="mt-2 grid grid-cols-1 gap-0.5">
         {list.length === 0 && <p className="py-6 text-center text-sm text-muted">No friends to show — add some first!</p>}
         {list.map((f) => {
           const on = selected.includes(f.id);

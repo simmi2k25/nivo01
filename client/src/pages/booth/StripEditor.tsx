@@ -165,7 +165,7 @@ export function StripEditor({ shots, names, roomCode, conversationId, onAgain, o
             </div>
           )}
           {tab === 'frame' && (
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div className="flex flex-wrap gap-2">
                 {FRAMES.map((f) => (
                   <button key={f.id} onClick={() => set({ frame: f.id })} title={f.name} aria-label={f.name} className={`h-10 w-10 rounded-xl border border-line transition ${opts.frame === f.id ? 'scale-110 ring-[3px] ring-primary ring-offset-2 ring-offset-surface' : ''}`} style={{ background: `linear-gradient(135deg, ${f.bg} 60%, ${f.accent} 60%)` }} />
@@ -203,7 +203,7 @@ export function StripEditor({ shots, names, roomCode, conversationId, onAgain, o
             </div>
           )}
           {tab === 'text' && (
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 gap-2">
               <label className="field h-11">
                 <Icon name="edit" size={18} className="text-faint" />
                 <input placeholder="Caption (e.g. best day ever!)" maxLength={40} value={opts.caption} onChange={(e) => set({ caption: e.target.value })} />
