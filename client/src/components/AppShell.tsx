@@ -16,7 +16,7 @@ export function AppShell() {
   const unread = useChat((s) => s.conversations.reduce((n, c) => n + (c.muted ? 0 : c.unread), 0));
   const loc = useLocation();
   // Inside a chat or a live booth the phone tab bar steps aside for the composer / camera.
-  const immersive = /^\/chats\/\d+/.test(loc.pathname) || /^\/booth\/[A-Za-z0-9]{6}/.test(loc.pathname);
+  const immersive = /^\/chats\/\d+/.test(loc.pathname) || /^\/booth\/[A-Za-z0-9]{6}/.test(loc.pathname) || loc.pathname === '/scan';
 
   return (
     <div className="flex h-dvh w-full overflow-hidden">

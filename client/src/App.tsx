@@ -15,6 +15,7 @@ import { useChat } from './stores/chat';
 const BoothHome = lazy(() => import('./pages/booth/BoothHome'));
 const BoothRoom = lazy(() => import('./pages/booth/BoothRoom'));
 const Memories = lazy(() => import('./pages/Memories'));
+const Scan = lazy(() => import('./pages/Scan'));
 
 export function App() {
   const { status, user, waking, init } = useAuth();
@@ -58,6 +59,7 @@ export function App() {
               <Route path="/booth" element={<BoothHome />} />
               <Route path="/booth/:code" element={<BoothRoom />} />
               <Route path="/memories" element={<Memories />} />
+              <Route path="/scan" element={<Scan />} />
               <Route path="/profile" element={<MyProfilePage />} />
               <Route path="/u/:username" element={<UserProfilePage />} />
             </Route>

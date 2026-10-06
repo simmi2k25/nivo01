@@ -369,6 +369,12 @@ textarea {
   .illus-wrap > * { display: none; }
 }
 
+@keyframes scan-line {
+  0%, 100% { top: 10%; }
+  50% { top: 88%; }
+}
+.scan-line { animation: scan-line 2.4s ease-in-out infinite; }
+
 .typing-dots i {
   display: inline-block;
   width: 6px;

@@ -64,9 +64,14 @@ export function FriendsPage() {
               {friends.length} friends · <span className="font-semibold text-[var(--success)]">{online} online</span>
             </p>
           </div>
-          <Link to="/profile?qr=1" className="btn btn-soft btn-sm">
-            <Icon name="qr" size={18} /> My QR
-          </Link>
+          <div className="flex gap-2">
+            <Link to="/scan" className="btn btn-primary btn-sm">
+              <Icon name="camera" size={18} /> Scan
+            </Link>
+            <Link to="/profile?qr=1" className="btn btn-soft btn-sm">
+              <Icon name="qr" size={18} /> My QR
+            </Link>
+          </div>
         </div>
         <form onSubmit={addByUsername} className="mt-3 flex gap-2">
           <label className="field h-11 flex-1">

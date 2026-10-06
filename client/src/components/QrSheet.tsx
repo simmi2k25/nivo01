@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { canvasToBlob, loadImage } from '../lib/image';
 import { publicOrigin } from '../lib/native';
 import { getPref, setPref } from '../lib/prefs';
@@ -130,7 +131,7 @@ export async function drawQrCard(canvas: HTMLCanvasElement, user: User, color: s
       if (!qr.modules.get(r, c) || isFinder(r, c)) continue;
       if (r >= lo && r < lo + logoModules && c >= lo && c < lo + logoModules) continue;
       ctx.beginPath();
-      ctx.arc(qx + c * m + m / 2, qy + r * m + m / 2, m * 0.42, 0, Math.PI * 2);
+      ctx.arc(qx + c * m + m / 2, qy + r * m + m / 2, m * 0.46, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -162,6 +163,7 @@ export async function drawQrCard(canvas: HTMLCanvasElement, user: User, color: s
 }
 
 export function QrSheet({ open, onClose, user }: { open: boolean; onClose: () => void; user: User }) {
+  const nav = useNavigate();
   const ref = useRef<HTMLCanvasElement>(null);
   const [color, setColor] = useState(() => getPref('qrColor', '#232c5c'));
   const [busy, setBusy] = useState(false);
@@ -218,6 +220,9 @@ export function QrSheet({ open, onClose, user }: { open: boolean; onClose: () =>
       </div>
       <button className="btn btn-ghost btn-sm mx-auto mt-2 flex" onClick={async () => toast((await copyText(link)) ? 'Profile link copied' : link)}>
         <Icon name="link" size={17} /> Copy profile link
+      </button>
+      <button className="btn btn-soft mt-1 w-full" onClick={() => nav('/scan')}>
+        <Icon name="camera" size={19} /> Scan a friend’s QR
       </button>
     </Sheet>
   );
