@@ -474,6 +474,8 @@ function InviteSheet({ open, onClose, code }: { open: boolean; onClose: () => vo
   const conversations = useChat((s) => s.conversations);
   const [sent, setSent] = useState<number[]>([]);
   const link = `${publicOrigin()}/booth/${code}`;
+  const inviteText = `Join my NivoTalk photobooth 📸\nRoom code: ${code}`;
+  const fullInvite = `${inviteText}\n${link}`;
 
   return (
     <Sheet open={open} onClose={onClose} title="Invite to the booth">
@@ -482,12 +484,16 @@ function InviteSheet({ open, onClose, code }: { open: boolean; onClose: () => vo
         <p className="font-display text-4xl font-bold tracking-[0.2em] text-primary-strong">{code}</p>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <button className="btn btn-soft btn-sm" onClick={async () => toast((await copyText(link)) ? 'Link copied' : link)}>
-          <Icon name="link" size={17} /> Copy link
+        <button className="btn btn-soft btn-sm" onClick={async () => toast((await copyText(fullInvite)) ? 'Invite with room code copied' : fullInvite)}>
+          <Icon name="link" size={17} /> Copy invite
         </button>
         <button
           className="btn btn-soft btn-sm"
-          onClick={() => (navigator.share ? navigator.share({ title: 'Join my NivoTalk photobooth', url: link }).catch(() => {}) : copyText(link).then(() => toast('Link copied')))}
+          onClick={() =>
+            navigator.share
+              ? navigator.share({ title: 'Join my NivoTalk photobooth', text: inviteText, url: link }).catch(() => {})
+              : copyText(fullInvite).then(() => toast('Invite with room code copied'))
+          }
         >
           <Icon name="share" size={17} /> Share
         </button>

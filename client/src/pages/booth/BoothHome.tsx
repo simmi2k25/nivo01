@@ -100,7 +100,7 @@ export default function BoothHome() {
           <p className="mt-1 text-muted">Open a room, invite up to 3 friends, and everyone’s camera snaps together into one strip.</p>
 
           <Option icon="camera" title="Shots" hint="Number of photos per person">
-            <div className="segmented shrink-0 [&>button]:!min-w-[34px] [&>button]:!px-2">
+            <div className="segmented w-full @min-[25rem]:w-auto [&>button]:flex-1 @min-[25rem]:[&>button]:flex-none">
               {SHOTS.map((v) => (
                 <button key={v} aria-pressed={shots === v} onClick={() => setShots(v)}>
                   {v}
@@ -109,7 +109,7 @@ export default function BoothHome() {
             </div>
           </Option>
           <Option icon="clock" title="Countdown" hint="Time before the photo">
-            <div className="segmented shrink-0 [&>button]:!min-w-[34px] [&>button]:!px-2">
+            <div className="segmented w-full @min-[25rem]:w-auto [&>button]:flex-1 @min-[25rem]:[&>button]:flex-none">
               {TIMERS.map((v) => (
                 <button key={v} aria-pressed={countdown === v} onClick={() => setCountdown(v)}>
                   {v}s
@@ -138,7 +138,7 @@ export default function BoothHome() {
               <Icon name="chevronDown" size={18} className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-muted" />
             </div>
           </div>
-          <button className="btn btn-primary mt-4 h-14 w-full text-[17px]" onClick={open} disabled={busy}>
+          <button className="btn btn-primary mt-4 h-14 w-full px-4 text-[17px]" onClick={open} disabled={busy}>
             <Icon name="camera" /> {busy ? 'Opening…' : 'Open booth room'} <Icon name="arrowRight" size={20} />
           </button>
         </section>
@@ -188,16 +188,21 @@ export default function BoothHome() {
 }
 
 function Option({ icon, title, hint, children }: { icon: 'camera' | 'clock'; title: string; hint: string; children: React.ReactNode }) {
+  // Narrow cards (phones, large text): title on top, choices full-width below. Wide cards: one row.
   return (
-    <div className="mt-3 flex items-center gap-3 rounded-[22px] border border-line p-3.5">
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
-        <Icon name={icon} size={21} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-bold">{title}</span>
-        <span className="block text-xs leading-snug text-muted">{hint}</span>
-      </span>
-      {children}
+    <div className="@container mt-3 rounded-[22px] border border-line p-3.5">
+      <div className="flex flex-col gap-3 @min-[25rem]:flex-row @min-[25rem]:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary-soft text-primary">
+            <Icon name={icon} size={21} />
+          </span>
+          <span className="min-w-0">
+            <span className="block font-bold">{title}</span>
+            <span className="block text-xs leading-snug text-muted">{hint}</span>
+          </span>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
