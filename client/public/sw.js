@@ -52,8 +52,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Hashed build assets, stickers and brand images: cache first.
-  if (/^\/(assets|stickers|brand|icons)\//.test(url.pathname)) {
+  // Hashed build assets, stickers, brand images and sounds: cache first.
+  if (/^\/(assets|stickers|brand|icons|sounds)\//.test(url.pathname)) {
     e.respondWith(
       caches.open(CACHE).then(async (cache) => {
         const hit = await cache.match(req);
@@ -64,4 +64,22 @@ self.addEventListener('fetch', (e) => {
       }),
     );
   }
+});
+
+// Tapping a notification focuses an open NivoTalk tab (and opens the chat), or starts a new one.
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const to = (e.notification.data && e.notification.data.to) || '/chats';
+  e.waitUntil(
+    (async () => {
+      const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const tab = tabs.find((c) => new URL(c.url).origin === self.location.origin);
+      if (tab) {
+        await tab.focus();
+        tab.postMessage({ type: 'notify:open', to });
+        return;
+      }
+      await self.clients.openWindow(to);
+    })(),
+  );
 });

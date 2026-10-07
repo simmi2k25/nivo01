@@ -1,6 +1,8 @@
 import type { Socket } from 'socket.io-client';
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { convTitle, preview } from '../lib/conv';
+import { notify } from '../lib/notify';
 import type { Conversation, Friend, Message, User } from '../lib/types';
 import { useAuth } from './auth';
 
@@ -122,7 +124,10 @@ export const useChat = create<ChatState>((set, get) => ({
     if (!conv) {
       // A chat we haven't seen yet (e.g. someone started it) — fetch its summary.
       api<{ conversation: Conversation }>(`/conversations/${m.conversationId}`)
-        .then(({ conversation }) => get().upsertConversation(conversation))
+        .then(({ conversation }) => {
+          get().upsertConversation(conversation);
+          notifyMessage(conversation, m);
+        })
         .catch(() => {});
       return;
     }
@@ -142,6 +147,7 @@ export const useChat = create<ChatState>((set, get) => ({
     });
     set({ typing });
     if (viewing && fromOther) get().markRead(m.conversationId);
+    else notifyMessage(conv, m);
   },
 
   markRead(id) {
@@ -172,6 +178,23 @@ export const useChat = create<ChatState>((set, get) => ({
     if (me && me.id === u.id) useAuth.getState().setUser({ ...me, ...u });
   },
 }));
+
+/** Pops up / chimes for a message from someone else, unless that chat is open or muted. */
+function notifyMessage(conv: Conversation, m: Message) {
+  const me = myId();
+  if (!me || m.senderId === me || m.senderId === null || conv.muted) return;
+  const viewing = useChat.getState().activeId === conv.id && document.visibilityState === 'visible';
+  if (viewing) return;
+  const sender = conv.members.find((u) => u.id === m.senderId);
+  const name = sender?.displayName ?? 'Someone';
+  notify({
+    title: conv.isGroup ? `${name} · ${convTitle(conv, me)}` : name,
+    body: m.kind === 'text' ? m.body : preview(m, me, conv.members),
+    to: `/chats/${conv.id}`,
+    user: sender,
+    tag: `chat:${conv.id}`,
+  });
+}
 
 function mergeById(server: Message[], pending: Message[]) {
   const seen = new Map<number, Message>();
@@ -262,6 +285,16 @@ export function bindChatSocket(s: Socket) {
   s.on('user:updated', (u: User) => st().patchUser(u));
   s.on('friends:changed', () => {
     if (st().friendsLoaded) st().loadFriends().catch(() => {});
+  });
+  s.on('friends:added', ({ user, mutual }: { user: User | null; mutual: boolean }) => {
+    if (!user) return;
+    notify({
+      title: user.displayName,
+      body: mutual ? 'added you back — you’re friends now 💕' : 'added you as a friend',
+      to: `/u/${user.username}`,
+      user,
+      tag: `friend:${user.id}`,
+    });
   });
   s.on('typing', ({ conversationId, userId, typing }: { conversationId: number; userId: number; typing: boolean }) => {
     const cur = { ...(st().typing[conversationId] ?? {}) };

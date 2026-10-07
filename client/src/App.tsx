@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router';
 import { AppShell } from './components/AppShell';
 import { Loader } from './components/Loader';
+import { Notifications } from './components/Notifications';
 import { Toaster } from './components/Toast';
 import { hideNativeSplash } from './lib/native';
 import { ChatsPage } from './pages/Chats';
@@ -48,6 +49,7 @@ export function App() {
   return (
     <>
       <Toaster />
+      {user && <Notifications />}
       <Suspense fallback={<Loader compact />}>
         <Routes>
           <Route path="/login" element={user ? <Navigate to={nextFrom()} replace /> : <LoginPage />} />

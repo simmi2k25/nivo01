@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { one, query } from '../db.js';
 import { fail, idParam, parse } from '../http.js';
-import { publicUser, USER_COLS, type UserRow } from '../model.js';
+import { getUser, publicUser, USER_COLS, type UserRow } from '../model.js';
 import { emitToUsers } from '../realtime/hub.js';
 import { USERNAME } from './auth.js';
 
@@ -43,7 +43,7 @@ router.post('/', async (req, res) => {
   );
   if (!target) throw fail(404, 'No one found with that username');
   if (target.id === req.userId) throw fail(400, 'That’s you!');
-  await query('INSERT INTO friendships (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
+  const added = await query('INSERT INTO friendships (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
     req.userId,
     target.id,
   ]);
@@ -55,6 +55,8 @@ router.post('/', async (req, res) => {
   );
   // Let the other person know someone added them (shows under "Added you").
   emitToUsers([target.id], 'friends:changed', { by: req.userId });
+  // Only a fresh add pops a notification — re-adding someone already added stays quiet.
+  if (added.rowCount) emitToUsers([target.id], 'friends:added', { user: await getUser(req.userId), mutual: row!.mutual });
   res.status(201).json({ friend: serialize(row!) });
 });
 

@@ -7,6 +7,22 @@
       "runtimeArgs": ["run", "dev", "-w", "client"],
       "env": { "API_PORT": "4100" },
       "port": 5173
+    },
+    {
+      "name": "localdb",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "localdb"],
+      "port": 5433
+    },
+    {
+      "name": "server-local",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "server"],
+      "env": {
+        "PORT": "4100",
+        "DATABASE_URL": "postgresql://postgres:postgres@127.0.0.1:5433/postgres"
+      },
+      "port": 4100
     }
   ]
 }

@@ -14,6 +14,7 @@ import { api, ApiError, errorText } from '../lib/api';
 import { player, useStopOnLeave } from '../lib/audio';
 import { lastSeen } from '../lib/format';
 import { prepareImage } from '../lib/image';
+import { notifyPrefs, playNotifySound, requestSystemNotify, systemNotifyAllowed, systemNotifySupported } from '../lib/notify';
 import { applyBubble, applyTheme, BUBBLES, getPref, getTheme, setPref } from '../lib/prefs';
 import { BUDDIES, BUDDY_NAMES } from '../lib/stickers';
 import type { Buddy, ProfileUser, Song, User } from '../lib/types';
@@ -342,6 +343,7 @@ function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }
             <span className="rounded-[20px] rounded-br-md bg-[var(--bubble-me)] px-3.5 py-2 text-sm text-[var(--bubble-me-text)]">Looks cute! 💕</span>
           </div>
         </div>
+        <NotificationSettings />
         <div className="rounded-2xl bg-surface-2 px-4 py-3 text-sm">
           <p className="font-bold">@{me.username}</p>
           {me.email && <p className="text-muted">{me.email}</p>}
@@ -351,6 +353,80 @@ function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }
         </button>
       </div>
     </Sheet>
+  );
+}
+
+function NotificationSettings() {
+  const [sound, setSound] = useState(notifyPrefs.sound());
+  const [popups, setPopups] = useState(notifyPrefs.popups());
+  const [system, setSystem] = useState(systemNotifyAllowed());
+  const blocked = systemNotifySupported() && Notification.permission === 'denied';
+  return (
+    <div>
+      <p className="mb-2 text-sm font-bold text-muted">Notifications</p>
+      <div className="grid gap-1 rounded-2xl bg-surface-2 p-1.5">
+        <SettingRow
+          icon="bell"
+          label="Pop-ups for new messages"
+          on={popups}
+          onChange={(v) => {
+            setPopups(v);
+            notifyPrefs.setPopups(v);
+          }}
+        />
+        <SettingRow
+          icon="music"
+          label="Notification sound"
+          on={sound}
+          onChange={(v) => {
+            setSound(v);
+            notifyPrefs.setSound(v);
+            if (v) playNotifySound(true);
+          }}
+        />
+        {systemNotifySupported() && (
+          <SettingRow
+            icon="sparkle"
+            label={blocked ? 'Alerts blocked in browser settings' : 'Alerts when NivoTalk is in the background'}
+            on={system}
+            disabled={blocked || system}
+            onChange={async (v) => {
+              if (v) setSystem(await requestSystemNotify());
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SettingRow({
+  icon,
+  label,
+  on,
+  disabled,
+  onChange,
+}: {
+  icon: 'bell' | 'music' | 'sparkle';
+  label: string;
+  on: boolean;
+  disabled?: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-semibold disabled:opacity-70"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+    >
+      <Icon name={icon} size={18} />
+      <span className="flex-1">{label}</span>
+      <span className={`relative h-6 w-10 shrink-0 rounded-full transition ${on ? 'bg-primary' : 'bg-black/15'}`}>
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+      </span>
+    </button>
   );
 }
 
