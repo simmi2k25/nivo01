@@ -35,6 +35,7 @@ const REASONS: Record<string, string> = {
   group_create: 'Started a group',
   group_join: 'Joined a group',
   watermark: 'Strip without watermark',
+  owner_grant: 'Owner top-up',
 };
 
 /** Balance, coin packs, what coins unlock, extra Memories space and recent history. */
