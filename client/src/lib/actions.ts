@@ -35,3 +35,13 @@ export async function setFavorite(id: number, favorite: boolean) {
   useChat.setState({ friends: useChat.getState().friends.map((f) => (f.id === id ? { ...f, favorite } : f)) });
   await api(`/friends/${id}`, { method: 'PATCH', body: { favorite } });
 }
+
+export async function blockUser(id: number) {
+  await api('/blocks', { body: { userId: id } });
+  const st = useChat.getState();
+  useChat.setState({ friends: st.friends.filter((f) => f.id !== id), addedMe: st.addedMe.filter((u) => u.id !== id) });
+}
+
+export async function unblockUser(id: number) {
+  await api(`/blocks/${id}`, { method: 'DELETE' });
+}

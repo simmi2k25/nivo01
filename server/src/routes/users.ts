@@ -160,6 +160,7 @@ router.get('/search', async (req, res) => {
             EXISTS (SELECT 1 FROM friendships f WHERE f.user_id = $1 AND f.friend_id = u.id) AS is_friend
        FROM users u
       WHERE u.id <> $1 AND (u.username LIKE $2 OR lower(u.display_name) LIKE $2)
+        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = u.id AND b.blocked_id = $1)
       ORDER BY (u.username = $3) DESC, u.username
       LIMIT 12`,
     [req.userId, like, q.toLowerCase()],
@@ -169,21 +170,25 @@ router.get('/search', async (req, res) => {
 
 router.get('/:username', async (req, res) => {
   const username = parse(USERNAME, req.params.username);
-  const u = await one<UserRow & { is_friend: boolean; added_me: boolean; favorite: boolean; friend_count: number }>(
+  const u = await one<UserRow & { is_friend: boolean; added_me: boolean; friend_count: number; blocked_by_me: boolean; blocked_me: boolean }>(
     `SELECT ${USER_COLS},
             EXISTS (SELECT 1 FROM friendships f WHERE f.user_id = $1 AND f.friend_id = u.id) AS is_friend,
             EXISTS (SELECT 1 FROM friendships f WHERE f.user_id = u.id AND f.friend_id = $1) AS added_me,
-            (SELECT count(*)::int FROM friendships f WHERE f.user_id = u.id) AS friend_count
+            (SELECT count(*)::int FROM friendships f WHERE f.user_id = u.id) AS friend_count,
+            EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = $1 AND b.blocked_id = u.id) AS blocked_by_me,
+            EXISTS (SELECT 1 FROM blocks b WHERE b.blocker_id = u.id AND b.blocked_id = $1) AS blocked_me
        FROM users u WHERE u.username = $2`,
     [req.userId, username],
   );
-  if (!u) throw fail(404, 'No one here by that name');
+  // People who blocked you simply don't exist from your side.
+  if (!u || u.blocked_me) throw fail(404, 'No one here by that name');
   res.json({
     user: {
       ...publicUser(u),
       isFriend: u.is_friend,
       addedMe: u.added_me,
       friendCount: u.friend_count,
+      blockedByMe: u.blocked_by_me,
       isMe: u.id === req.userId,
     },
   });

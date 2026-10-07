@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { one, query } from '../db.js';
 import { fail, idParam, parse } from '../http.js';
-import { getUser, publicUser, USER_COLS, type UserRow } from '../model.js';
+import { blockBetween, getUser, publicUser, USER_COLS, type UserRow } from '../model.js';
 import { pushToUsers } from '../push.js';
 import { emitToUsers } from '../realtime/hub.js';
 import { USERNAME } from './auth.js';
@@ -44,6 +44,9 @@ router.post('/', async (req, res) => {
   );
   if (!target) throw fail(404, 'No one found with that username');
   if (target.id === req.userId) throw fail(400, 'That’s you!');
+  const block = await blockBetween(req.userId, target.id);
+  if (block === 'byMe') throw fail(400, 'You blocked this person — unblock them first');
+  if (block === 'byThem') throw fail(404, 'No one found with that username');
   const added = await query('INSERT INTO friendships (user_id, friend_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
     req.userId,
     target.id,

@@ -3,12 +3,15 @@ import { z } from 'zod';
 import { one, query, tx } from '../db.js';
 import { fail, idParam, parse } from '../http.js';
 import {
+  assertNotBlocked,
+  blockBetween,
   conversationsFor,
+  hydrateMessages,
   getUser,
   isMember,
   memberIds,
   postMessage,
-  serializeMessage,
+  REACTIONS,
   STICKER_ID,
   type MessageRow,
 } from '../model.js';
@@ -49,6 +52,13 @@ router.post('/direct', async (req, res) => {
   if (!other) throw fail(404, 'User not found');
 
   const key = [req.userId, userId].sort((a, b) => a - b).join(':');
+  if (await blockBetween(req.userId, userId)) {
+    // An existing chat can still be opened to read; a new one can't be started.
+    const existing = await one<{ id: number }>('SELECT id FROM conversations WHERE direct_key = $1', [key]);
+    if (!existing) throw fail(403, 'You can’t message this person');
+    res.json({ conversation: await summaryFor(req.userId, existing.id) });
+    return;
+  }
   const { id, created } = await tx(async (c) => {
     const ins = await c.query<{ id: number }>(
       `INSERT INTO conversations (is_group, direct_key, created_by) VALUES (false, $1, $2)
@@ -222,7 +232,7 @@ router.get('/:id/messages', async (req, res) => {
   );
   const hasMore = r.rows.length > limit;
   const rows = r.rows.slice(0, limit).reverse();
-  res.json({ messages: rows.map((m) => serializeMessage(m)), hasMore });
+  res.json({ messages: await hydrateMessages(rows), hasMore });
 });
 
 const sendSchema = z.discriminatedUnion('kind', [
@@ -230,17 +240,20 @@ const sendSchema = z.discriminatedUnion('kind', [
     kind: z.literal('text'),
     body: z.string().trim().min(1, 'Message is empty').max(4000, 'Messages can be up to 4,000 characters'),
     clientId: z.string().max(64).optional(),
+    replyToId: idParam.optional(),
   }),
   z.object({
     kind: z.literal('sticker'),
     meta: z.object({ stickerId: z.string().regex(STICKER_ID, 'Unknown sticker') }),
     clientId: z.string().max(64).optional(),
+    replyToId: idParam.optional(),
   }),
   z.object({
     kind: z.literal('photo'),
     body: z.string().trim().max(300).default(''),
     meta: z.object({ photoId: idParam }),
     clientId: z.string().max(64).optional(),
+    replyToId: idParam.optional(),
   }),
 ]);
 
@@ -260,8 +273,61 @@ router.post('/:id/messages', async (req, res) => {
     body: msg.kind === 'sticker' ? '' : msg.body,
     meta: msg.kind === 'text' ? {} : msg.meta,
     clientId: msg.clientId,
+    replyToId: msg.replyToId,
   });
   res.status(201).json({ message: out });
+});
+
+/**
+ * Edits, deletions and reactions are sent as 'op' messages: most originals have already been delivered and
+ * removed from the server, so each device applies the change to its own copy (and checks the op's sender
+ * owns the message for edits and deletes). If the original is still here, it's updated too.
+ */
+async function sendOp(req: { params: Record<string, string>; userId: number }, op: Record<string, unknown>, own: boolean) {
+  const id = parse(idParam, req.params.id);
+  const targetId = parse(idParam, req.params.mid);
+  await requireMember(id, req.userId);
+  const m = await one<MessageRow>('SELECT * FROM messages WHERE id = $1 AND conversation_id = $2', [targetId, id]);
+  if (m && (m.deleted_at || m.kind === 'system' || m.kind === 'op')) throw fail(404, 'Message not found');
+  if (m && own && m.sender_id !== req.userId) throw fail(403, 'You can only change your own messages');
+  if (op.op === 'edit' && m && m.kind !== 'text') throw fail(400, 'Only text messages can be edited');
+  const message = await postMessage({ conversationId: id, senderId: req.userId, kind: 'op', meta: { ...op, targetId } });
+  return { m, message };
+}
+
+router.patch('/:id/messages/:mid', async (req, res) => {
+  const { body } = parse(
+    z.object({ body: z.string().trim().min(1, 'Message is empty').max(4000, 'Messages can be up to 4,000 characters') }),
+    req.body,
+  );
+  const { m, message } = await sendOp(req, { op: 'edit', body }, true);
+  if (m) await query('UPDATE messages SET body = $2, edited_at = now() WHERE id = $1', [m.id, body]);
+  res.json({ op: message });
+});
+
+// Deletes for everyone: devices wipe their copy and show a "message deleted" placeholder.
+router.delete('/:id/messages/:mid', async (req, res) => {
+  const { m, message } = await sendOp(req, { op: 'delete' }, true);
+  if (m) {
+    await query(`UPDATE messages SET deleted_at = now(), body = '', meta = '{}'::jsonb WHERE id = $1`, [m.id]);
+    await query('DELETE FROM message_reactions WHERE message_id = $1', [m.id]);
+  }
+  res.json({ op: message });
+});
+
+router.put('/:id/messages/:mid/reaction', async (req, res) => {
+  const { emoji } = parse(z.object({ emoji: z.enum(REACTIONS).nullable() }), req.body);
+  const { m, message } = await sendOp(req, { op: 'react', emoji }, false);
+  if (m && emoji) {
+    await query(
+      `INSERT INTO message_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
+       ON CONFLICT (message_id, user_id) DO UPDATE SET emoji = EXCLUDED.emoji, created_at = now()`,
+      [m.id, req.userId, emoji],
+    );
+  } else if (m) {
+    await query('DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2', [m.id, req.userId]);
+  }
+  res.json({ op: message });
 });
 
 router.post('/:id/read', async (req, res) => {

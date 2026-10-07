@@ -1,3 +1,5 @@
+import { deviceId } from './device';
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -21,7 +23,10 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
       method,
       credentials: 'include',
       signal,
-      headers: raw ? { 'content-type': raw.type || 'application/octet-stream' } : body ? { 'content-type': 'application/json' } : undefined,
+      headers: {
+        'x-device-id': deviceId(),
+        ...(raw ? { 'content-type': raw.type || 'application/octet-stream' } : body ? { 'content-type': 'application/json' } : {}),
+      },
       body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
   } catch (e) {

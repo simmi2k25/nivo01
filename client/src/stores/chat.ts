@@ -2,15 +2,17 @@ import type { Socket } from 'socket.io-client';
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import { convTitle, preview } from '../lib/conv';
+import * as local from '../lib/localdb';
 import { notify } from '../lib/notify';
 import type { Conversation, Friend, Message, User } from '../lib/types';
 import { useAuth } from './auth';
 
 type Thread = { items: Message[]; hasMore: boolean; loading: boolean; loaded: boolean };
-type Outgoing =
+type Outgoing = (
   | { kind: 'text'; body: string }
   | { kind: 'sticker'; meta: { stickerId: string } }
-  | { kind: 'photo'; body?: string; meta: { photoId: number } };
+  | { kind: 'photo'; body?: string; meta: { photoId: number } }
+) & { replyToId?: number };
 
 type ChatState = {
   conversations: Conversation[];
@@ -25,10 +27,16 @@ type ChatState = {
 
   reset: () => void;
   loadConversations: () => Promise<void>;
-  upsertConversation: (c: Conversation) => void;
+  /** Server data keeps the last message and unread count this device worked out; `local` sets them as given. */
+  upsertConversation: (c: Conversation, opts?: { local?: boolean }) => void;
   removeConversation: (id: number) => void;
   loadMessages: (id: number, older?: boolean) => Promise<void>;
-  send: (id: number, msg: Outgoing) => Promise<void>;
+  sync: () => Promise<void>;
+  send: (id: number, msg: Outgoing, replyTo?: Message) => Promise<void>;
+  updateMessage: (m: Message) => void;
+  editMessage: (m: Message, body: string) => Promise<void>;
+  deleteMessage: (m: Message) => Promise<void>;
+  react: (m: Message, emoji: string | null) => Promise<void>;
   retry: (id: number, clientId: string) => Promise<void>;
   receive: (m: Message) => void;
   markRead: (id: number) => void;
@@ -45,6 +53,13 @@ const emptyThread: Thread = { items: [], hasMore: true, loading: false, loaded: 
 const outgoingPayloads = new Map<string, Outgoing>();
 let readTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** Opens this account's on-device chat history. */
+function ensureLocal() {
+  const me = myId();
+  if (!me) throw new Error('Not signed in');
+  return local.openLocal(me);
+}
+
 export const useChat = create<ChatState>((set, get) => ({
   conversations: [],
   conversationsLoaded: false,
@@ -56,23 +71,31 @@ export const useChat = create<ChatState>((set, get) => ({
   activeId: null,
 
   reset() {
+    local.closeLocal();
+    pendingAcks.clear();
     set({ conversations: [], conversationsLoaded: false, threads: {}, friends: [], addedMe: [], friendsLoaded: false, typing: {}, activeId: null });
   },
 
   async loadConversations() {
     const { conversations } = await api<{ conversations: Conversation[] }>('/conversations');
-    set({ conversations: sortConvs(conversations), conversationsLoaded: true });
+    const withLocal = await Promise.all(conversations.map(localSummary));
+    set({ conversations: sortConvs(withLocal), conversationsLoaded: true });
   },
 
-  upsertConversation(c) {
-    const rest = get().conversations.filter((x) => x.id !== c.id);
-    set({ conversations: sortConvs([c, ...rest]) });
+  upsertConversation(c, opts) {
+    const existing = get().conversations.find((x) => x.id === c.id);
+    const next = opts?.local || !existing ? c : { ...c, lastMessage: existing.lastMessage, unread: existing.unread };
+    set({ conversations: sortConvs([next, ...get().conversations.filter((x) => x.id !== c.id)]) });
+    if (!existing && !opts?.local) refreshSummary(c.id);
   },
 
   removeConversation(id) {
     const threads = { ...get().threads };
     delete threads[id];
     set({ conversations: get().conversations.filter((c) => c.id !== id), threads });
+    ensureLocal()
+      .then(() => local.deleteConversation(id))
+      .catch(() => {});
   },
 
   async loadMessages(id, older = false) {
@@ -80,13 +103,12 @@ export const useChat = create<ChatState>((set, get) => ({
     if (t.loading || (older && !t.hasMore)) return;
     set({ threads: { ...get().threads, [id]: { ...t, loading: true } } });
     try {
+      await ensureLocal();
       const before = older ? t.items.find((m) => m.id > 0)?.id : undefined;
-      const r = await api<{ messages: Message[]; hasMore: boolean }>(
-        `/conversations/${id}/messages${before ? `?before=${before}` : ''}`,
-      );
+      const r = await local.getThread(id, before);
       const cur = get().threads[id] ?? emptyThread;
       const pending = older ? [] : cur.items.filter((m) => m.pending || m.failed);
-      const items = older ? [...r.messages, ...cur.items] : mergeById([...r.messages, ...cur.items.filter((m) => m.id > 0)], pending);
+      const items = older ? [...r.items, ...cur.items] : mergeById([...r.items, ...cur.items.filter((m) => m.id > 0)], pending);
       set({ threads: { ...get().threads, [id]: { items, hasMore: r.hasMore, loading: false, loaded: true } } });
     } catch (e) {
       set({ threads: { ...get().threads, [id]: { ...(get().threads[id] ?? emptyThread), loading: false } } });
@@ -94,8 +116,32 @@ export const useChat = create<ChatState>((set, get) => ({
     }
   },
 
-  async send(id, msg) {
+  /** Downloads everything this device hasn't received, stores it, then tells the server it can delete it. */
+  async sync() {
+    if (syncing) return syncing;
+    syncing = (async () => {
+      try {
+        await ensureLocal();
+        for (let round = 0; round < 20; round++) {
+          const r = await api<{ messages: Message[]; more: boolean }>('/sync');
+          for (const m of r.messages) await inbox(() => handle(m, false));
+          if (!r.more) break;
+        }
+        await inbox(() => Promise.resolve());
+      } finally {
+        syncing = null;
+      }
+      await flushAcks();
+      if (get().conversationsLoaded) await get().loadConversations();
+      const active = get().activeId;
+      if (active) await get().loadMessages(active);
+    })();
+    return syncing;
+  },
+
+  async send(id, msg, replyTo) {
     const clientId = `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+    if (replyTo) msg = { ...msg, replyToId: replyTo.id };
     outgoingPayloads.set(clientId, msg);
     const optimistic: Message = {
       id: -Date.now(),
@@ -105,6 +151,9 @@ export const useChat = create<ChatState>((set, get) => ({
       body: 'body' in msg ? (msg.body ?? '') : '',
       meta: 'meta' in msg ? msg.meta : {},
       createdAt: new Date().toISOString(),
+      replyToId: replyTo?.id ?? null,
+      replyTo: replyTo ? local.quoteOf(replyTo) : null,
+      reactions: {},
       clientId,
       pending: true,
     };
@@ -118,41 +167,66 @@ export const useChat = create<ChatState>((set, get) => ({
   },
 
   receive(m) {
-    const me = myId();
-    addToThread(m.conversationId, m);
+    void inbox(() => handle(m, true));
+  },
+
+  updateMessage(m) {
+    const t = get().threads[m.conversationId];
+    if (t) {
+      const items = t.items.map((x) => {
+        if (x.id === m.id) return { ...x, ...m, clientId: x.clientId };
+        // Keep reply quotes in sync with edits and deletes of the original.
+        if (x.replyTo?.id === m.id) return { ...x, replyTo: local.quoteOf(m) };
+        return x;
+      });
+      set({ threads: { ...get().threads, [m.conversationId]: { ...t, items } } });
+    }
     const conv = get().conversations.find((c) => c.id === m.conversationId);
-    if (!conv) {
-      // A chat we haven't seen yet (e.g. someone started it) — fetch its summary.
-      api<{ conversation: Conversation }>(`/conversations/${m.conversationId}`)
-        .then(({ conversation }) => {
-          get().upsertConversation(conversation);
-          notifyMessage(conversation, m);
-        })
-        .catch(() => {});
-      return;
+    if (conv?.lastMessage?.id === m.id) {
+      set({ conversations: get().conversations.map((c) => (c.id === conv.id ? { ...c, lastMessage: { ...c.lastMessage!, ...m } } : c)) });
     }
-    const viewing = get().activeId === m.conversationId && document.visibilityState === 'visible';
-    const fromOther = m.senderId !== me && m.senderId !== null;
-    const typing = { ...get().typing };
-    if (m.senderId && typing[m.conversationId]) {
-      const t = { ...typing[m.conversationId] };
-      delete t[m.senderId];
-      typing[m.conversationId] = t;
+  },
+
+  async editMessage(m, body) {
+    const prev = m;
+    get().updateMessage({ ...m, body, editedAt: new Date().toISOString() });
+    try {
+      const r = await api<{ op: Message }>(`/conversations/${m.conversationId}/messages/${m.id}`, { method: 'PATCH', body: { body } });
+      get().receive(r.op);
+    } catch (e) {
+      get().updateMessage(prev);
+      throw e;
     }
-    get().upsertConversation({
-      ...conv,
-      lastMessage: m,
-      updatedAt: m.createdAt,
-      unread: fromOther && !viewing ? conv.unread + 1 : conv.unread,
-    });
-    set({ typing });
-    if (viewing && fromOther) get().markRead(m.conversationId);
-    else notifyMessage(conv, m);
+  },
+
+  async deleteMessage(m) {
+    const r = await api<{ op: Message }>(`/conversations/${m.conversationId}/messages/${m.id}`, { method: 'DELETE' });
+    get().receive(r.op);
+  },
+
+  async react(m, emoji) {
+    const me = myId();
+    if (!me) return;
+    const prev = m;
+    const reactions = { ...(m.reactions ?? {}) };
+    if (emoji) reactions[me] = emoji;
+    else delete reactions[me];
+    get().updateMessage({ ...m, reactions });
+    try {
+      const r = await api<{ op: Message }>(`/conversations/${m.conversationId}/messages/${m.id}/reaction`, {
+        method: 'PUT',
+        body: { emoji },
+      });
+      get().receive(r.op);
+    } catch (e) {
+      get().updateMessage(prev);
+      throw e;
+    }
   },
 
   markRead(id) {
     const conv = get().conversations.find((c) => c.id === id);
-    if (conv?.unread) get().upsertConversation({ ...conv, unread: 0 });
+    if (conv?.unread) get().upsertConversation({ ...conv, unread: 0 }, { local: true });
     clearTimeout(readTimer);
     readTimer = setTimeout(() => api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {}), 250);
   },
@@ -179,6 +253,126 @@ export const useChat = create<ChatState>((set, get) => ({
   },
 }));
 
+// ---------------------------------------------------------------- incoming messages
+
+let syncing: Promise<void> | null = null;
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Runs message handling strictly in arrival order (stores are async). */
+function inbox(fn: () => Promise<void>) {
+  const next = queue.then(fn, fn).catch((e) => console.warn('[chat] could not store a message', e));
+  queue = next;
+  return next;
+}
+
+/** Stores one message from the server (or applies an op), updates the screen and queues its receipt. */
+async function handle(m: Message, live: boolean) {
+  await ensureLocal();
+  const st = useChat.getState();
+  queueAck(m.conversationId, m.id);
+
+  if (m.kind === 'op') {
+    const updated = await local.applyOp(m);
+    if (updated) st.updateMessage(updated);
+    return;
+  }
+
+  if (m.replyToId && !m.replyTo) {
+    const t = await local.getMessage(m.replyToId);
+    if (t) m = { ...m, replyTo: local.quoteOf(t) };
+  }
+  const already = await local.getMessage(m.id);
+  await local.putMessages([already ? { ...m, reactions: already.reactions ?? m.reactions } : m]);
+  addToThread(m.conversationId, m);
+  // Before the chat list has loaded (first sync at start-up), the list is built from storage afterwards.
+  if (already || !useChat.getState().conversationsLoaded) return;
+
+  const me = myId();
+  const conv = st.conversations.find((c) => c.id === m.conversationId);
+  if (!conv) {
+    // A chat we haven't seen yet (e.g. someone started it) — fetch its summary.
+    api<{ conversation: Conversation }>(`/conversations/${m.conversationId}`)
+      .then(async ({ conversation }) => {
+        useChat.getState().upsertConversation(await localSummary(conversation), { local: true });
+        if (live) notifyMessage(conversation, m);
+      })
+      .catch(() => {});
+    return;
+  }
+  const viewing = st.activeId === m.conversationId && document.visibilityState === 'visible';
+  const fromOther = m.senderId !== me && m.senderId !== null;
+  const typing = { ...useChat.getState().typing };
+  if (m.senderId && typing[m.conversationId]) {
+    const t = { ...typing[m.conversationId] };
+    delete t[m.senderId];
+    typing[m.conversationId] = t;
+  }
+  const newer = !conv.lastMessage || m.id >= conv.lastMessage.id;
+  useChat.getState().upsertConversation(
+    {
+      ...conv,
+      lastMessage: newer ? m : conv.lastMessage,
+      updatedAt: newer ? m.createdAt : conv.updatedAt,
+      unread: fromOther && !viewing && new Date(m.createdAt) > new Date(conv.lastReadAt) ? conv.unread + 1 : conv.unread,
+    },
+    { local: true },
+  );
+  useChat.setState({ typing });
+  if (viewing && fromOther) st.markRead(m.conversationId);
+  else if (live) notifyMessage(conv, m);
+}
+
+// ---------------------------------------------------------------- receipts
+
+const pendingAcks = new Map<number, number>();
+let ackTimer: ReturnType<typeof setTimeout> | undefined;
+
+function queueAck(conversationId: number, id: number) {
+  if (id <= 0) return;
+  pendingAcks.set(conversationId, Math.max(id, pendingAcks.get(conversationId) ?? 0));
+  clearTimeout(ackTimer);
+  ackTimer = setTimeout(() => void flushAcks(), 800);
+}
+
+/**
+ * Tells the server what this device has stored so it can delete it. Held back during a sync: a receipt
+ * says "I have everything up to here", which is only true once the catch-up has finished.
+ */
+async function flushAcks() {
+  if (syncing || !pendingAcks.size) return;
+  await queue;
+  const upTo = Object.fromEntries(pendingAcks);
+  pendingAcks.clear();
+  try {
+    await api('/sync/ack', { body: { upTo } });
+  } catch {
+    for (const [c, id] of Object.entries(upTo)) queueAck(Number(c), id);
+  }
+}
+
+// ---------------------------------------------------------------- chat list from local history
+
+/** Fills in a chat's last message and unread count from what this device has stored. */
+async function localSummary(c: Conversation): Promise<Conversation> {
+  const me = myId();
+  if (!me) return c;
+  try {
+    await ensureLocal();
+    const s = await local.summary(c.id, c.lastReadAt, me);
+    return s.last ? { ...c, lastMessage: s.last, unread: s.unread } : c;
+  } catch {
+    return c;
+  }
+}
+
+function refreshSummary(id: number) {
+  const c = useChat.getState().conversations.find((x) => x.id === id);
+  if (!c) return;
+  localSummary(c).then((next) => {
+    if (useChat.getState().conversations.some((x) => x.id === id)) useChat.getState().upsertConversation(next, { local: true });
+  });
+}
+
 /** Pops up / chimes for a message from someone else, unless that chat is open or muted. */
 function notifyMessage(conv: Conversation, m: Message) {
   const me = myId();
@@ -196,10 +390,10 @@ function notifyMessage(conv: Conversation, m: Message) {
   });
 }
 
-function mergeById(server: Message[], pending: Message[]) {
+function mergeById(stored: Message[], pending: Message[]) {
   const seen = new Map<number, Message>();
-  for (const m of server) seen.set(m.id, m);
-  const done = new Set(server.map((m) => m.clientId).filter(Boolean));
+  for (const m of stored) seen.set(m.id, m);
+  const done = new Set(stored.map((m) => m.clientId).filter(Boolean));
   return [...[...seen.values()].sort((a, b) => a.id - b.id), ...pending.filter((p) => !done.has(p.clientId))];
 }
 
@@ -250,10 +444,8 @@ async function deliver(id: number, clientId: string) {
 export function bindChatSocket(s: Socket) {
   const st = useChat.getState;
   s.on('connect', () => {
-    // Catch up on anything missed while disconnected.
-    if (st().conversationsLoaded) st().loadConversations().catch(() => {});
-    const active = st().activeId;
-    if (active) st().loadMessages(active).catch(() => {});
+    // Catch up on anything that arrived while disconnected.
+    st().sync().catch(() => {});
     if (st().friendsLoaded) st().loadFriends().catch(() => {});
   });
   s.on('message:new', (m: Message) => st().receive(m));
@@ -264,7 +456,10 @@ export function bindChatSocket(s: Socket) {
         threads: { ...st().threads, [conversationId]: { ...t, items: t.items.filter((m) => !messageIds.includes(m.id)) } },
       });
     }
-    st().loadConversations().catch(() => {});
+    ensureLocal()
+      .then(() => local.deleteMessages(messageIds))
+      .then(() => refreshSummary(conversationId))
+      .catch(() => {});
   });
   s.on('conversation:new', (c: Conversation) => st().upsertConversation(c));
   s.on('conversation:updated', (c: Conversation) => st().upsertConversation(c));

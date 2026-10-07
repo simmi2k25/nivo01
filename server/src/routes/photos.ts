@@ -8,6 +8,8 @@ import { emitToUsers } from '../realtime/hub.js';
 
 const router = Router();
 const MAX_BYTES = 6 * 1024 * 1024;
+/** Strips each person can keep in Memories (keeps the free database small). */
+export const MAX_PHOTOS = 5;
 
 const photoUrl = (id: number) => `/api/photos/${id}`;
 
@@ -21,6 +23,10 @@ router.post('/', express.raw({ type: () => true, limit: MAX_BYTES }), async (req
   const info = sniffImage(buf);
   if (!info) throw fail(415, 'Strips must be JPEG, PNG or WebP');
   if (info.width > 8000 || info.height > 8000) throw fail(413, 'That image is too large');
+  const count = await one<{ n: number }>('SELECT count(*)::int AS n FROM photos WHERE owner_id = $1', [req.userId]);
+  if ((count?.n ?? 0) >= MAX_PHOTOS) {
+    throw fail(409, `Memories is full (${MAX_PHOTOS} strips). Delete one in Memories to save this strip.`);
+  }
   const row = await one<{ id: number; created_at: Date }>(
     `INSERT INTO photos (owner_id, room_code, mime, size, data) VALUES ($1, $2, $3, $4, $5)
      RETURNING id, created_at`,
@@ -37,6 +43,7 @@ router.get('/', async (req, res) => {
     [req.userId],
   );
   res.json({
+    limit: MAX_PHOTOS,
     photos: r.rows.map((p) => ({ id: p.id, url: photoUrl(p.id), roomCode: p.room_code, size: p.size, createdAt: p.created_at })),
   });
 });

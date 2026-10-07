@@ -3,13 +3,14 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Avatar, BuddyAvatar } from '../components/Avatar';
 import { Icon, type IconName } from '../components/Icon';
 import { Loader } from '../components/Loader';
+import { PhotoCropper } from '../components/PhotoCropper';
 import { ProfileStage } from '../components/ProfileStage';
 import { QrSheet } from '../components/QrSheet';
 import { Sheet } from '../components/Sheet';
 import { SongCard } from '../components/SongCard';
 import { deviceCountry, SongPicker } from '../components/SongPicker';
 import { toast } from '../components/Toast';
-import { addFriend, openDirectChat, startBoothWith } from '../lib/actions';
+import { addFriend, blockUser, openDirectChat, startBoothWith, unblockUser } from '../lib/actions';
 import { api, ApiError, errorText } from '../lib/api';
 import { player, useStopOnLeave } from '../lib/audio';
 import { lastSeen } from '../lib/format';
@@ -47,6 +48,29 @@ function Identity({ user, editing }: { user: User; editing?: boolean }) {
   );
 }
 
+/** The pink heart with someone's friend count, floating on their profile. */
+function FriendHeart({ count, to }: { count: number; to?: string }) {
+  const heart = (
+    <>
+      <svg width="58" height="54" viewBox="0 0 24 22" style={{ animation: 'heart-glow 2.6s ease-in-out infinite' }} aria-hidden="true">
+        <path d="M12 21s-9-5.3-9-12.1A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9 2.9C21 15.7 12 21 12 21Z" fill="#ff9fb8" stroke="#fff" strokeWidth="1.2" />
+      </svg>
+      <span className="absolute top-[15px] text-sm font-extrabold">{count}</span>
+    </>
+  );
+  const cls = 'anim-pop delay-4 absolute top-[30%] right-6 grid place-items-center';
+  const label = `${count} ${count === 1 ? 'friend' : 'friends'}`;
+  return to ? (
+    <Link to={to} className={cls} aria-label={label}>
+      {heart}
+    </Link>
+  ) : (
+    <span className={cls} role="img" aria-label={label} title={label}>
+      {heart}
+    </span>
+  );
+}
+
 // ------------------------------------------------------------------ my profile
 
 export function MyProfilePage() {
@@ -80,14 +104,7 @@ export function MyProfilePage() {
           </button>
         </div>
       </div>
-      {friendCount !== null && (
-        <Link to="/friends" className="anim-pop delay-4 absolute top-[30%] right-6 grid place-items-center" aria-label={`${friendCount} friends`}>
-          <svg width="58" height="54" viewBox="0 0 24 22" style={{ animation: 'heart-glow 2.6s ease-in-out infinite' }} aria-hidden="true">
-            <path d="M12 21s-9-5.3-9-12.1A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9 2.9C21 15.7 12 21 12 21Z" fill="#ff9fb8" stroke="#fff" strokeWidth="1.2" />
-          </svg>
-          <span className="absolute top-[15px] text-sm font-extrabold">{friendCount}</span>
-        </Link>
-      )}
+      {friendCount !== null && <FriendHeart count={friendCount} to="/friends" />}
       <div className="flex-1" />
       <div className="px-6 pb-4">
         <Identity user={me} />
@@ -121,6 +138,7 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
   const [photoSheet, setPhotoSheet] = useState(false);
   const [songSheet, setSongSheet] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
 
@@ -253,7 +271,16 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
       </div>
 
       <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => (pickImage('cover', e.target.files?.[0]), (e.target.value = ''))} />
-      <input ref={avatarInput} type="file" accept="image/*" hidden onChange={(e) => (pickImage('avatar', e.target.files?.[0]), (e.target.value = ''))} />
+      <input ref={avatarInput} type="file" accept="image/*" hidden onChange={(e) => (setCropFile(e.target.files?.[0] ?? null), (e.target.value = ''))} />
+      <PhotoCropper
+        file={cropFile}
+        onCancel={() => setCropFile(null)}
+        onDone={(blob) => {
+          setCropFile(null);
+          setPending((p) => ({ ...p, avatar: blob }));
+          setPreviews((p) => ({ ...p, avatar: URL.createObjectURL(blob) }));
+        }}
+      />
 
       <Sheet open={photoSheet} onClose={() => setPhotoSheet(false)} title="Photo & buddy">
         <div className="grid grid-cols-1 gap-2">
@@ -344,6 +371,7 @@ function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }
           </div>
         </div>
         <NotificationSettings />
+        <BlockedPeople />
         <div className="rounded-2xl bg-surface-2 px-4 py-3 text-sm">
           <p className="font-bold">@{me.username}</p>
           {me.email && <p className="text-muted">{me.email}</p>}
@@ -353,6 +381,55 @@ function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }
         </button>
       </div>
     </Sheet>
+  );
+}
+
+function BlockedPeople() {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<User[] | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    api<{ users: User[] }>('/blocks')
+      .then((r) => setList(r.users))
+      .catch(() => setList([]));
+  }, [open]);
+  return (
+    <div>
+      <button className="flex w-full items-center gap-3 rounded-2xl bg-surface-2 px-4 py-3 text-left text-sm font-semibold" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <Icon name="lock" size={18} />
+        <span className="flex-1">Blocked people</span>
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={18} className="text-muted" />
+      </button>
+      {open && (
+        <div className="mt-2 grid gap-1">
+          {list === null && <p className="px-2 text-sm text-muted">Loading…</p>}
+          {list?.length === 0 && <p className="px-2 text-sm text-muted">You haven’t blocked anyone.</p>}
+          {list?.map((b) => (
+            <div key={b.id} className="flex items-center gap-3 rounded-2xl px-2 py-1.5">
+              <Avatar user={b} size={36} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold">{b.displayName}</span>
+                <span className="block truncate text-xs text-muted">@{b.username}</span>
+              </span>
+              <button
+                className="btn btn-soft btn-sm"
+                onClick={async () => {
+                  try {
+                    await unblockUser(b.id);
+                    setList((l) => l?.filter((x) => x.id !== b.id) ?? null);
+                    toast(`Unblocked ${b.displayName}`);
+                  } catch (e) {
+                    toast(errorText(e), 'error');
+                  }
+                }}
+              >
+                Unblock
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -439,6 +516,7 @@ export function UserProfilePage() {
   const [user, setUser] = useState<ProfileUser | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [menu, setMenu] = useState(false);
   // Live updates when they change their photo or bio.
   const live = useChat((s) => (user ? (s.friends.find((f) => f.id === user.id) ?? s.conversations.flatMap((c) => c.members).find((m) => m.id === user.id)) : undefined));
   useStopOnLeave();
@@ -487,9 +565,12 @@ export function UserProfilePage() {
         <button className="icon-btn !text-white hover:!bg-white/20" onClick={() => (window.history.length > 1 ? nav(-1) : nav('/friends'))} aria-label="Close">
           <Icon name="x" />
         </button>
-        <span className="flex-1 text-center text-sm font-semibold opacity-90">{lastSeen(u.lastSeenAt, u.online)}</span>
-        <span className="w-10" />
+        <span className="flex-1 text-center text-sm font-semibold opacity-90">{u.blockedByMe ? '' : lastSeen(u.lastSeenAt, u.online)}</span>
+        <button className="icon-btn !text-white hover:!bg-white/20" onClick={() => setMenu(true)} aria-label="More options">
+          <Icon name="more" />
+        </button>
       </div>
+      {!u.blockedByMe && <FriendHeart count={u.friendCount} />}
       {u.song && (
         <div className="px-4">
           <SongCard song={u.song} />
@@ -498,8 +579,24 @@ export function UserProfilePage() {
       <div className="flex-1" />
       <div className="px-6 pb-4">
         <Identity user={u} />
-        {u.addedMe && !u.isFriend && <p className="mt-2 text-center text-xs font-bold opacity-80">{u.displayName} added you 💌</p>}
+        {u.addedMe && !u.isFriend && !u.blockedByMe && <p className="mt-2 text-center text-xs font-bold opacity-80">{u.displayName} added you 💌</p>}
+        {u.blockedByMe && <p className="mt-2 text-center text-sm font-bold opacity-90">You blocked {u.displayName}</p>}
       </div>
+      {u.blockedByMe ? (
+        <div className="mx-4 mb-[calc(84px+env(safe-area-inset-bottom))] border-t border-white/25 pt-3 md:mb-4">
+          <button
+            className="btn w-full bg-white/90 font-bold text-ink"
+            disabled={busy}
+            onClick={act(async () => {
+              await unblockUser(u.id);
+              setUser({ ...u, blockedByMe: false });
+              toast(`Unblocked ${u.displayName}`);
+            })}
+          >
+            Unblock
+          </button>
+        </div>
+      ) : (
       <div className="mx-4 mb-[calc(84px+env(safe-area-inset-bottom))] flex border-t border-white/25 pt-2 md:mb-4">
         <ActionButton icon="chat" label="Chat" disabled={busy} onClick={act(async () => nav(`/chats/${(await openDirectChat(u.id)).id}`))} />
         <ActionButton
@@ -514,6 +611,41 @@ export function UserProfilePage() {
         />
         <ActionButton icon="camera" label="Photobooth" disabled={busy} onClick={act(async () => nav(`/booth/${(await startBoothWith(u.id)).code}`))} />
       </div>
+      )}
+      <Sheet open={menu} onClose={() => setMenu(false)} title={`@${u.username}`}>
+        {u.blockedByMe ? (
+          <button
+            className="btn btn-soft w-full"
+            disabled={busy}
+            onClick={act(async () => {
+              await unblockUser(u.id);
+              setUser({ ...u, blockedByMe: false });
+              setMenu(false);
+              toast(`Unblocked ${u.displayName}`);
+            })}
+          >
+            Unblock {u.displayName}
+          </button>
+        ) : (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted">
+              {u.displayName} won’t be able to message you, add you or see your profile. You’ll stop being friends. They won’t be told.
+            </p>
+            <button
+              className="btn btn-danger w-full"
+              disabled={busy}
+              onClick={act(async () => {
+                await blockUser(u.id);
+                setUser({ ...u, blockedByMe: true, isFriend: false, addedMe: false });
+                setMenu(false);
+                toast(`Blocked ${u.displayName}`);
+              })}
+            >
+              <Icon name="lock" size={19} /> Block {u.displayName}
+            </button>
+          </div>
+        )}
+      </Sheet>
     </ProfileStage>
   );
 }

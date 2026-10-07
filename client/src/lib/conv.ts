@@ -15,6 +15,7 @@ export function preview(m: Message | null, meId: number, members: User[]) {
   if (!m) return 'Say hi 👋';
   const who = m.senderId === meId ? 'You: ' : '';
   const name = members.find((u) => u.id === m.senderId)?.displayName;
+  if (m.deletedAt) return `${who}🚫 Message deleted`;
   switch (m.kind) {
     case 'sticker':
       return `${who}sent a sticker`;

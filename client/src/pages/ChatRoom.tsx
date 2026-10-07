@@ -1,20 +1,24 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { Sheet } from '../components/Sheet';
 import { StickerPicker } from '../components/StickerPicker';
 import { toast } from '../components/Toast';
+import { blockUser, unblockUser } from '../lib/actions';
 import { api, errorText } from '../lib/api';
 import { convTitle, others } from '../lib/conv';
 import { dayLabel, isSameDay, lastSeen, linkify, timeOf } from '../lib/format';
 import { downloadImage } from '../lib/share';
 import { sendTyping } from '../lib/socket';
 import { stickerUrl } from '../lib/stickers';
-import type { Conversation, Message, Room, User } from '../lib/types';
+import { REACTIONS, type Conversation, type Message, type ReplyPreview, type Room, type User } from '../lib/types';
 import { useAuth } from '../stores/auth';
 import { typingIn, useChat } from '../stores/chat';
 import { FriendPicker, GroupAvatar } from './Chats';
+
+/** What the composer is doing besides a new message: replying to one, or editing one of yours. */
+type Draft = { mode: 'reply' | 'edit'; m: Message } | null;
 
 export function ChatRoom({ conversationId }: { conversationId: number }) {
   const me = useAuth((s) => s.user)!;
@@ -24,9 +28,11 @@ export function ChatRoom({ conversationId }: { conversationId: number }) {
   const thread = useChat((s) => s.threads[conversationId]);
   const { loadMessages, setActive, upsertConversation } = useChat.getState();
   const [missing, setMissing] = useState(false);
+  const [draft, setDraft] = useState<Draft>(null);
 
   useEffect(() => {
     setActive(conversationId);
+    setDraft(null);
     loadMessages(conversationId).catch(() => {});
     const onVis = () => document.visibilityState === 'visible' && useChat.getState().markRead(conversationId);
     document.addEventListener('visibilitychange', onVis);
@@ -62,8 +68,17 @@ export function ChatRoom({ conversationId }: { conversationId: number }) {
   return (
     <div className="flex h-full flex-col bg-bg">
       <RoomHeader conv={conv} me={me} />
-      <MessageList conv={conv} me={me} items={thread?.items ?? []} hasMore={thread?.hasMore ?? true} loading={!!thread?.loading} loaded={!!thread?.loaded} />
-      <Composer conv={conv} />
+      <MessageList
+        conv={conv}
+        me={me}
+        items={thread?.items ?? []}
+        hasMore={thread?.hasMore ?? true}
+        loading={!!thread?.loading}
+        loaded={!!thread?.loaded}
+        canWrite={!conv.block}
+        onDraft={setDraft}
+      />
+      {conv.block ? <BlockedBar conv={conv} me={me} /> : <Composer conv={conv} me={me} draft={draft} onDraft={setDraft} />}
     </div>
   );
 }
@@ -149,6 +164,22 @@ function ChatMenu({ conv, me, open, onClose }: { conv: Conversation; me: User; o
     }
   }
 
+  async function toggleBlock() {
+    const other = others(conv, me.id)[0];
+    if (!other) return;
+    const blocking = conv.block !== 'byMe';
+    if (blocking && !confirm(`Block ${other.displayName}? They won’t be able to message you or see your profile.`)) return;
+    try {
+      if (blocking) await blockUser(other.id);
+      else await unblockUser(other.id);
+      upsert({ ...conv, block: blocking ? 'byMe' : null });
+      toast(blocking ? `Blocked ${other.displayName}` : `Unblocked ${other.displayName}`);
+      onClose();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    }
+  }
+
   async function leave() {
     if (!confirm('Leave this group?')) return;
     try {
@@ -214,6 +245,11 @@ function ChatMenu({ conv, me, open, onClose }: { conv: Conversation; me: User; o
               </Link>
             ))}
           </div>
+          {!conv.isGroup && conv.block !== 'byThem' && others(conv, me.id)[0] && (
+            <button className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left font-bold text-danger hover:bg-surface-2" onClick={toggleBlock}>
+              <Icon name="lock" /> {conv.block === 'byMe' ? 'Unblock' : 'Block'} {others(conv, me.id)[0].displayName}
+            </button>
+          )}
           {conv.isGroup && (
             <button className="btn btn-danger w-full" onClick={leave}>
               <Icon name="door" size={19} /> Leave group
@@ -227,8 +263,29 @@ function ChatMenu({ conv, me, open, onClose }: { conv: Conversation; me: User; o
 
 // ---------------------------------------------------------------- messages
 
-function MessageList({ conv, me, items, hasMore, loading, loaded }: { conv: Conversation; me: User; items: Message[]; hasMore: boolean; loading: boolean; loaded: boolean }) {
+function MessageList({
+  conv,
+  me,
+  items,
+  hasMore,
+  loading,
+  loaded,
+  canWrite,
+  onDraft,
+}: {
+  conv: Conversation;
+  me: User;
+  items: Message[];
+  hasMore: boolean;
+  loading: boolean;
+  loaded: boolean;
+  canWrite: boolean;
+  onDraft: (d: Draft) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
+  const prevLast = useRef<number | string | undefined>(undefined);
+  const [actionsFor, setActionsFor] = useState<Message | null>(null);
+  const react = useChat((s) => s.react);
   const nearBottom = useRef(true);
   const prevFirst = useRef<number | undefined>(undefined);
   const prevHeight = useRef(0);
@@ -248,9 +305,11 @@ function MessageList({ conv, me, items, hasMore, loading, loaded }: { conv: Conv
     } else if (nearBottom.current) {
       el.scrollTop = el.scrollHeight;
       setNewBelow(false);
-    } else if (items.length) {
+    } else if (items.length && (items[items.length - 1]?.clientId ?? items[items.length - 1]?.id) !== prevLast.current) {
+      // Only a new message at the bottom counts — not an edit or reaction further up.
       setNewBelow(true);
     }
+    prevLast.current = items[items.length - 1]?.clientId ?? items[items.length - 1]?.id;
     prevFirst.current = first;
     prevHeight.current = el.scrollHeight;
   }, [items]);
@@ -261,6 +320,16 @@ function MessageList({ conv, me, items, hasMore, loading, loaded }: { conv: Conv
     if (nearBottom.current) setNewBelow(false);
     prevHeight.current = el.scrollHeight;
     if (el.scrollTop < 80 && hasMore && !loading && loaded) loadMessages(conv.id, true).catch(() => {});
+  }
+
+  /** Scrolls to the quoted message (if it's loaded) and flashes it. */
+  function jumpTo(id: number) {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return toast('That message is further up — scroll to load it');
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('msg-flash');
+    void el.offsetWidth;
+    el.classList.add('msg-flash');
   }
 
   const lastMine = [...items].reverse().find((m) => m.senderId === me.id && m.kind !== 'system');
@@ -297,8 +366,15 @@ function MessageList({ conv, me, items, hasMore, loading, loaded }: { conv: Conv
                 sender={sender}
                 showSender={conv.isGroup && !grouped}
                 grouped={!!grouped}
+                meId={me.id}
+                membersById={membersById}
+                canAct={canWrite}
                 onOpenPhoto={() => setViewer(m)}
                 onRetry={() => m.clientId && retry(conv.id, m.clientId)}
+                onReply={() => onDraft({ mode: 'reply', m })}
+                onActions={() => setActionsFor(m)}
+                onReact={(emoji) => react(m, emoji).catch((e) => toast(errorText(e), 'error'))}
+                onJump={jumpTo}
               />
               {m === lastMine && (
                 <div className="mt-0.5 mr-1 text-right text-[11px] font-semibold text-faint">
@@ -321,9 +397,18 @@ function MessageList({ conv, me, items, hasMore, loading, loaded }: { conv: Conv
         </button>
       )}
       <PhotoViewer m={viewer} onClose={() => setViewer(null)} />
+      <MessageActions
+        m={actionsFor}
+        meId={me.id}
+        onClose={() => setActionsFor(null)}
+        onReply={(m) => onDraft({ mode: 'reply', m })}
+        onEdit={(m) => onDraft({ mode: 'edit', m })}
+      />
     </div>
   );
 }
+
+const SWIPE_REPLY_PX = 56;
 
 function MessageRow({
   m,
@@ -331,17 +416,34 @@ function MessageRow({
   sender,
   showSender,
   grouped,
+  meId,
+  membersById,
+  canAct,
   onOpenPhoto,
   onRetry,
+  onReply,
+  onActions,
+  onReact,
+  onJump,
 }: {
   m: Message;
   mine: boolean;
   sender?: User;
   showSender: boolean;
   grouped: boolean;
+  meId: number;
+  membersById: Map<number, User>;
+  canAct: boolean;
   onOpenPhoto: () => void;
   onRetry: () => void;
+  onReply: () => void;
+  onActions: () => void;
+  onReact: (emoji: string | null) => void;
+  onJump: (id: number) => void;
 }) {
+  const [dx, setDx] = useState(0);
+  const gesture = useRef<{ x: number; y: number; swiping: boolean; done: boolean; timer?: ReturnType<typeof setTimeout> } | null>(null);
+
   if (m.kind === 'system') {
     return (
       <div className="my-2 flex justify-center">
@@ -350,50 +452,313 @@ function MessageRow({
     );
   }
 
-  const bubble =
-    m.kind === 'text' ? (
-      <div
-        className={`max-w-full rounded-[20px] px-3.5 py-2 text-[15px] leading-snug break-words whitespace-pre-wrap shadow-sm ${
-          mine ? 'rounded-br-md bg-[var(--bubble-me)] text-[var(--bubble-me-text)]' : 'rounded-bl-md bg-[var(--bubble-them)]'
-        }`}
-      >
-        {linkify(m.body).map((p, i) =>
-          p.href ? (
-            <a key={i} href={p.href} target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2">
-              {p.text}
-            </a>
-          ) : (
-            <Fragment key={i}>{p.text}</Fragment>
-          ),
-        )}
-      </div>
-    ) : m.kind === 'sticker' ? (
+  const deleted = !!m.deletedAt;
+  const interactive = canAct && !deleted && m.id > 0;
+
+  // Touch: swipe right to reply, hold to open actions. Mouse: right-click or the hover buttons.
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (!interactive || e.pointerType === 'mouse') return;
+    const g: NonNullable<typeof gesture.current> = { x: e.clientX, y: e.clientY, swiping: false, done: false };
+    g.timer = setTimeout(() => {
+      g.done = true;
+      navigator.vibrate?.(12);
+      onActions();
+    }, 450);
+    gesture.current = g;
+  }
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    const g = gesture.current;
+    if (!g || g.done) return;
+    const ddx = e.clientX - g.x;
+    const ddy = e.clientY - g.y;
+    if (!g.swiping) {
+      if (Math.abs(ddx) > 8 || Math.abs(ddy) > 8) clearTimeout(g.timer);
+      if (Math.abs(ddy) > 12 && Math.abs(ddy) > Math.abs(ddx)) {
+        gesture.current = null; // they're scrolling the chat
+        return;
+      }
+      if (ddx > 10 && ddx > Math.abs(ddy)) {
+        g.swiping = true;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* the finger already lifted */
+        }
+      }
+    }
+    if (g.swiping) {
+      const next = Math.max(0, Math.min(90, ddx * 0.7));
+      if (next >= SWIPE_REPLY_PX && dx < SWIPE_REPLY_PX) navigator.vibrate?.(8);
+      setDx(next);
+    }
+  }
+  function onPointerEnd() {
+    const g = gesture.current;
+    if (g) clearTimeout(g.timer);
+    if (g?.swiping && dx >= SWIPE_REPLY_PX) onReply();
+    gesture.current = null;
+    setDx(0);
+  }
+
+  const bubbleShape = mine ? 'rounded-br-md' : 'rounded-bl-md';
+  const quote = m.replyTo ? (
+    <ReplyQuote r={m.replyTo} meId={meId} membersById={membersById} mine={mine && m.kind === 'text'} onClick={() => onJump(m.replyTo!.id)} />
+  ) : null;
+
+  const bubble = deleted ? (
+    <div className={`rounded-[20px] border border-dashed border-line px-3.5 py-2 text-[14px] text-faint italic ${bubbleShape}`}>
+      🚫 {mine ? 'You deleted this message' : 'This message was deleted'}
+    </div>
+  ) : m.kind === 'text' ? (
+    <div
+      className={`max-w-full rounded-[20px] px-3.5 py-2 text-[15px] leading-snug break-words whitespace-pre-wrap shadow-sm ${
+        mine ? 'rounded-br-md bg-[var(--bubble-me)] text-[var(--bubble-me-text)]' : 'rounded-bl-md bg-[var(--bubble-them)]'
+      }`}
+    >
+      {quote}
+      {linkify(m.body).map((p, i) =>
+        p.href ? (
+          <a key={i} href={p.href} target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2">
+            {p.text}
+          </a>
+        ) : (
+          <Fragment key={i}>{p.text}</Fragment>
+        ),
+      )}
+    </div>
+  ) : m.kind === 'sticker' ? (
+    <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+      {quote && <div className="max-w-[220px]">{quote}</div>}
       <img src={stickerUrl(m.meta.stickerId)} alt="sticker" className="anim-pop h-32 w-32 object-contain md:h-36 md:w-36" draggable={false} />
-    ) : m.kind === 'photo' ? (
-      <button onClick={onOpenPhoto} className={`overflow-hidden rounded-[18px] bg-surface p-1.5 text-left shadow-sm ${mine ? 'rounded-br-md' : 'rounded-bl-md'}`}>
-        <img src={`/api/photos/${m.meta.photoId}`} alt="Photo strip" className="max-h-80 max-w-[220px] rounded-xl object-contain" loading="lazy" />
-        {m.body && <p className="px-1.5 pt-1.5 pb-0.5 text-sm">{m.body}</p>}
-      </button>
-    ) : (
-      <BoothInviteCard m={m} mine={mine} />
-    );
+    </div>
+  ) : m.kind === 'photo' ? (
+    <button onClick={onOpenPhoto} className={`overflow-hidden rounded-[18px] bg-surface p-1.5 text-left shadow-sm ${bubbleShape}`}>
+      {quote}
+      <StripThumb photoId={m.meta.photoId} />
+      {m.body && <p className="px-1.5 pt-1.5 pb-0.5 text-sm">{m.body}</p>}
+    </button>
+  ) : (
+    <BoothInviteCard m={m} mine={mine} />
+  );
+
+  const reactions = Object.entries(m.reactions ?? {});
+  const counts = new Map<string, number>();
+  for (const [, e] of reactions) counts.set(e, (counts.get(e) ?? 0) + 1);
+  const myReaction = m.reactions?.[meId];
 
   return (
-    <div className={`flex items-end gap-2 ${mine ? 'justify-end' : ''} ${grouped ? 'mt-0.5' : 'mt-2.5'}`}>
-      {!mine && <span className="w-8 shrink-0">{!grouped && sender && <Link to={`/u/${sender.username}`}><Avatar user={sender} size={32} /></Link>}</span>}
-      <div className={`flex max-w-[78%] flex-col md:max-w-[62%] ${mine ? 'items-end' : 'items-start'}`}>
-        {showSender && !mine && sender && <span className="mb-0.5 ml-2 text-xs font-bold text-muted">{sender.displayName}</span>}
-        <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
-          <div className={m.pending ? 'opacity-70' : ''}>{bubble}</div>
-          <span className="shrink-0 pb-0.5 text-[10.5px] text-faint">{timeOf(m.createdAt)}</span>
+    <div
+      id={`msg-${m.id}`}
+      className={`group relative flex touch-pan-y items-end rounded-2xl ${grouped ? 'mt-0.5' : 'mt-2.5'}`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+      onContextMenu={(e) => {
+        if (!interactive) return;
+        e.preventDefault();
+        clearTimeout(gesture.current?.timer);
+        gesture.current = null;
+        onActions();
+      }}
+    >
+      {/* Reply arrow revealed by the swipe */}
+      {dx > 0 && (
+        <span
+          className="pointer-events-none absolute top-1/2 left-1 grid h-8 w-8 place-items-center rounded-full bg-primary-soft text-primary-strong"
+          style={{ opacity: Math.min(1, dx / SWIPE_REPLY_PX), transform: `translateY(-50%) scale(${dx >= SWIPE_REPLY_PX ? 1.1 : 0.8})` }}
+        >
+          <Icon name="back" size={16} />
+        </span>
+      )}
+      <div
+        className={`flex min-w-0 flex-1 items-end gap-2 ${mine ? 'justify-end' : ''} ${dx ? '' : 'transition-transform duration-200'}`}
+        style={dx ? { transform: `translateX(${dx}px)` } : undefined}
+      >
+        {!mine && <span className="w-8 shrink-0">{!grouped && sender && <Link to={`/u/${sender.username}`}><Avatar user={sender} size={32} /></Link>}</span>}
+        <div className={`flex max-w-[78%] flex-col md:max-w-[62%] ${mine ? 'items-end' : 'items-start'}`}>
+          {showSender && !mine && sender && <span className="mb-0.5 ml-2 text-xs font-bold text-muted">{sender.displayName}</span>}
+          <div className={`flex items-end gap-1.5 ${mine ? 'flex-row-reverse' : ''}`}>
+            <div
+              className={`min-w-0 pointer-coarse:select-none [-webkit-touch-callout:none] ${m.pending ? 'opacity-70' : ''}`}
+              onDoubleClick={() => interactive && onReact(myReaction === '❤️' ? null : '❤️')}
+            >
+              {bubble}
+            </div>
+            <span className="shrink-0 pb-0.5 text-[10.5px] text-faint">
+              {m.editedAt && !deleted && <span className="mr-1 italic">edited</span>}
+              {timeOf(m.createdAt)}
+            </span>
+            {interactive && (
+              <span className="hidden shrink-0 items-center gap-0.5 self-center opacity-0 transition group-hover:opacity-100 pointer-fine:flex">
+                <button className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-surface-2" onClick={onReply} aria-label="Reply">
+                  <Icon name="back" size={15} />
+                </button>
+                <button className="grid h-7 w-7 place-items-center rounded-full text-muted hover:bg-surface-2" onClick={onActions} aria-label="React and more">
+                  <Icon name="smile" size={15} />
+                </button>
+              </span>
+            )}
+          </div>
+          {counts.size > 0 && (
+            <div className={`relative z-[1] -mt-1.5 flex gap-1 ${mine ? 'mr-10' : 'ml-2'}`}>
+              {[...counts].map(([emoji, n]) => (
+                <button
+                  key={emoji}
+                  className={`anim-pop flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[13px] leading-none shadow-sm ring-2 ring-bg ${
+                    myReaction === emoji ? 'bg-primary-soft' : 'bg-surface'
+                  }`}
+                  onClick={() => interactive && onReact(myReaction === emoji ? null : emoji)}
+                  title={reactions
+                    .filter(([, e]) => e === emoji)
+                    .map(([uid]) => (Number(uid) === meId ? 'You' : (membersById.get(Number(uid))?.displayName ?? 'Someone')))
+                    .join(', ')}
+                  aria-label={`${emoji} ${n}`}
+                >
+                  {emoji}
+                  {n > 1 && <span className="text-[11px] font-bold text-muted">{n}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {m.failed && (
+            <button onClick={onRetry} className="mt-0.5 text-xs font-bold text-danger">
+              Failed to send · Retry
+            </button>
+          )}
         </div>
-        {m.failed && (
-          <button onClick={onRetry} className="mt-0.5 text-xs font-bold text-danger">
-            Failed to send · Retry
+      </div>
+    </div>
+  );
+}
+
+/** A shared strip; once its owner deletes it from Memories, a placeholder stays in the chat. */
+function StripThumb({ photoId }: { photoId: number }) {
+  const [gone, setGone] = useState(false);
+  if (gone) {
+    return <span className="block w-[200px] rounded-xl bg-surface-2 px-3 py-6 text-center text-sm text-faint">📸 This strip was deleted</span>;
+  }
+  return (
+    <img
+      src={`/api/photos/${photoId}`}
+      alt="Photo strip"
+      className="max-h-80 max-w-[220px] rounded-xl object-contain"
+      loading="lazy"
+      onError={() => setGone(true)}
+    />
+  );
+}
+
+/** The quoted message shown at the top of a reply; tapping it jumps to the original. */
+function ReplyQuote({
+  r,
+  meId,
+  membersById,
+  mine,
+  onClick,
+}: {
+  r: ReplyPreview;
+  meId: number;
+  membersById: Map<number, User>;
+  mine: boolean;
+  onClick: () => void;
+}) {
+  const who = r.senderId === meId ? 'You' : (membersById.get(r.senderId ?? 0)?.displayName ?? 'Someone');
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`mb-1.5 block w-full min-w-[140px] rounded-xl border-l-[3px] px-2.5 py-1.5 text-left text-[13px] leading-snug ${
+        mine ? 'border-white/70 bg-white/20' : 'border-primary bg-primary-soft/70 text-ink'
+      }`}
+    >
+      <span className="block text-xs font-bold opacity-90">{who}</span>
+      <span className="line-clamp-2 opacity-80">{replySnippet(r)}</span>
+    </button>
+  );
+}
+
+function replySnippet(r: { kind: string; body: string; deleted?: boolean; deletedAt?: string | null }) {
+  if (r.deleted || r.deletedAt) return '🚫 Message deleted';
+  if (r.kind === 'sticker') return '🦖 Sticker';
+  if (r.kind === 'photo') return r.body ? `📸 ${r.body}` : '📸 Photo strip';
+  if (r.kind === 'booth_invite') return '📷 Photobooth invite';
+  return r.body;
+}
+
+/** Hold / right-click menu: quick reactions, reply, copy, edit and delete. */
+function MessageActions({
+  m,
+  meId,
+  onClose,
+  onReply,
+  onEdit,
+}: {
+  m: Message | null;
+  meId: number;
+  onClose: () => void;
+  onReply: (m: Message) => void;
+  onEdit: (m: Message) => void;
+}) {
+  if (!m) return null;
+  const { react, deleteMessage } = useChat.getState();
+  const mine = m.senderId === meId;
+  const myReaction = m.reactions?.[meId];
+  const run = (fn: () => Promise<unknown>) => () => {
+    onClose();
+    fn().catch((e) => toast(errorText(e), 'error'));
+  };
+  const row = 'flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left font-bold hover:bg-surface-2';
+  return (
+    <Sheet open onClose={onClose}>
+      <div className="grid gap-1 pt-2">
+        <div className="mb-2 flex justify-between rounded-full bg-surface-2 p-1.5">
+          {REACTIONS.map((e) => (
+            <button
+              key={e}
+              className={`grid h-11 w-11 place-items-center rounded-full text-[26px] transition active:scale-90 ${myReaction === e ? 'scale-110 bg-primary-soft' : 'hover:bg-surface'}`}
+              onClick={run(() => react(m, myReaction === e ? null : e))}
+              aria-label={`React ${e}`}
+              aria-pressed={myReaction === e}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+        <button className={row} onClick={() => (onClose(), onReply(m))}>
+          <Icon name="back" className="text-primary" /> Reply
+        </button>
+        {m.kind === 'text' && (
+          <button
+            className={row}
+            onClick={run(async () => {
+              await navigator.clipboard.writeText(m.body);
+              toast('Copied');
+            })}
+          >
+            <Icon name="copy" className="text-primary" /> Copy text
+          </button>
+        )}
+        {mine && m.kind === 'text' && (
+          <button className={row} onClick={() => (onClose(), onEdit(m))}>
+            <Icon name="edit" className="text-primary" /> Edit
+          </button>
+        )}
+        {mine && (
+          <button
+            className={`${row} text-danger`}
+            onClick={() => {
+              if (confirm('Delete this message for everyone?')) run(() => deleteMessage(m))();
+            }}
+          >
+            <Icon name="trash" /> Delete for everyone
           </button>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -449,11 +814,64 @@ function PhotoViewer({ m, onClose }: { m: Message | null; onClose: () => void })
 
 // ---------------------------------------------------------------- composer
 
-function Composer({ conv }: { conv: Conversation }) {
+/** Replaces the composer in a direct chat where one of you blocked the other. */
+function BlockedBar({ conv, me }: { conv: Conversation; me: User }) {
+  const other = others(conv, me.id)[0];
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="safe-bottom shrink-0 border-t border-line bg-surface px-4 py-3 text-center text-sm">
+      {conv.block === 'byMe' ? (
+        <>
+          <p className="font-semibold text-muted">You blocked {other?.displayName ?? 'this person'}.</p>
+          <button
+            className="btn btn-soft btn-sm mt-2"
+            disabled={busy || !other}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await unblockUser(other!.id);
+                useChat.getState().upsertConversation({ ...conv, block: null });
+              } catch (e) {
+                toast(errorText(e), 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Unblock
+          </button>
+        </>
+      ) : (
+        <p className="font-semibold text-muted">You can’t reply to this chat.</p>
+      )}
+    </div>
+  );
+}
+
+function Composer({ conv, me, draft, onDraft }: { conv: Conversation; me: User; draft: Draft; onDraft: (d: Draft) => void }) {
   const send = useChat((s) => s.send);
+  const editMessage = useChat((s) => s.editMessage);
   const [text, setText] = useState('');
   const [stickers, setStickers] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
+  const savedText = useRef('');
+
+  // Editing fills the box with the message; finishing or cancelling brings back what you were typing.
+  useEffect(() => {
+    if (draft?.mode === 'edit') {
+      savedText.current = text;
+      setText(draft.m.body);
+    }
+    if (draft) requestAnimationFrame(() => ta.current?.focus());
+  }, [draft?.m.id, draft?.mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function clearDraft() {
+    if (draft?.mode === 'edit') setText(savedText.current);
+    onDraft(null);
+  }
+
+  const replyTo = draft?.mode === 'reply' ? draft.m : undefined;
+  const replyWho = draft && (draft.m.senderId === me.id ? 'yourself' : (conv.members.find((u) => u.id === draft.m.senderId)?.displayName ?? 'Someone'));
 
   useLayoutEffect(() => {
     const el = ta.current;
@@ -465,9 +883,17 @@ function Composer({ conv }: { conv: Conversation }) {
   function submit() {
     const body = text.trim();
     if (!body) return;
+    if (draft?.mode === 'edit') {
+      const m = draft.m;
+      setText(savedText.current);
+      onDraft(null);
+      if (body !== m.body) editMessage(m, body.slice(0, 4000)).catch((e) => toast(errorText(e), 'error'));
+      return;
+    }
     setText('');
     sendTyping(conv.id, false);
-    send(conv.id, { kind: 'text', body: body.slice(0, 4000) });
+    send(conv.id, { kind: 'text', body: body.slice(0, 4000) }, replyTo);
+    if (draft) onDraft(null);
     ta.current?.focus();
   }
 
@@ -477,10 +903,23 @@ function Composer({ conv }: { conv: Conversation }) {
       e.preventDefault();
       submit();
     }
+    if (e.key === 'Escape' && draft) clearDraft();
   }
 
   return (
     <div className="safe-bottom shrink-0 border-t border-line bg-surface">
+      {draft && (
+        <div className="anim-rise flex items-center gap-2 border-b border-line px-3 py-2 md:px-5">
+          <Icon name={draft.mode === 'edit' ? 'edit' : 'back'} size={18} className="shrink-0 text-primary" />
+          <div className="min-w-0 flex-1 border-l-[3px] border-primary pl-2.5">
+            <p className="text-xs font-bold text-primary-strong">{draft.mode === 'edit' ? 'Editing message' : `Replying to ${replyWho}`}</p>
+            <p className="truncate text-sm text-muted">{replySnippet(draft.m)}</p>
+          </div>
+          <button className="icon-btn shrink-0" onClick={clearDraft} aria-label={draft.mode === 'edit' ? 'Cancel editing' : 'Cancel reply'}>
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-1.5 px-2 py-2 md:px-4">
         <button
           className={`icon-btn shrink-0 ${stickers ? '!bg-primary-soft !text-primary-strong' : ''}`}
@@ -508,14 +947,19 @@ function Composer({ conv }: { conv: Conversation }) {
           className={`grid h-[42px] w-[42px] shrink-0 place-items-center rounded-full transition ${text.trim() ? 'bg-primary text-white shadow-md' : 'bg-primary-soft text-faint'}`}
           onClick={submit}
           disabled={!text.trim()}
-          aria-label="Send"
+          aria-label={draft?.mode === 'edit' ? 'Save edit' : 'Send'}
         >
-          <Icon name="send" size={20} />
+          <Icon name={draft?.mode === 'edit' ? 'check' : 'send'} size={20} />
         </button>
       </div>
       {stickers && (
         <div className="anim-rise border-t border-line">
-          <StickerPicker onPick={(id) => send(conv.id, { kind: 'sticker', meta: { stickerId: id } })} />
+          <StickerPicker
+            onPick={(id) => {
+              send(conv.id, { kind: 'sticker', meta: { stickerId: id } }, replyTo);
+              if (replyTo) onDraft(null);
+            }}
+          />
         </div>
       )}
     </div>

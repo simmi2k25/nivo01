@@ -394,3 +394,17 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Tapping a reply quote flashes the original message. */
+@keyframes msg-flash {
+  0%,
+  60% {
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.msg-flash {
+  animation: msg-flash 1.4s ease-out;
+}

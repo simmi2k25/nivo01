@@ -11,12 +11,16 @@ import type { Photo } from '../lib/types';
 
 export default function Memories() {
   const [photos, setPhotos] = useState<Photo[] | null>(null);
+  const [limit, setLimit] = useState(5);
   const [open, setOpen] = useState<Photo | null>(null);
   const [sendId, setSendId] = useState<number | null>(null);
 
   useEffect(() => {
-    api<{ photos: Photo[] }>('/photos')
-      .then((r) => setPhotos(r.photos))
+    api<{ photos: Photo[]; limit: number }>('/photos')
+      .then((r) => {
+        setPhotos(r.photos);
+        setLimit(r.limit ?? 5);
+      })
       .catch((e) => {
         setPhotos([]);
         toast(errorText(e), 'error');
@@ -42,6 +46,11 @@ export default function Memories() {
       <header className="safe-top px-5 pt-4">
         <h1 className="text-[28px] font-bold">Memories</h1>
         <p className="text-sm text-muted">Your photo strips — only you can see this gallery.</p>
+        {photos && (
+          <p className={`mt-1 text-xs font-bold ${photos.length >= limit ? 'text-danger' : 'text-primary-strong'}`}>
+            {photos.length} of {limit} saved{photos.length >= limit ? ' · delete one to save a new strip' : ''}
+          </p>
+        )}
       </header>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-28 md:pb-6">
         {photos === null && (
