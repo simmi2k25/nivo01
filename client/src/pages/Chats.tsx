@@ -253,22 +253,25 @@ function GroupInvites() {
   return (
     <div className="mb-2 grid gap-2 px-1">
       {invites.map((inv) => (
-        <div key={inv.conversationId} className="anim-rise flex items-center gap-3 rounded-2xl bg-primary-soft/70 px-3 py-2.5">
+        <div key={inv.conversationId} className="anim-rise flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-primary-soft/70 px-3 py-2.5">
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-primary">
             <Icon name="group" />
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-[55%]">
             <p className="truncate text-sm font-bold">{inv.title || 'Group chat'}</p>
             <p className="truncate text-xs text-muted">
               {inv.invitedBy?.displayName ?? 'Someone'} invited you · {inv.memberCount} {inv.memberCount === 1 ? 'member' : 'members'}
             </p>
           </div>
-          <button className="btn btn-ghost btn-sm" disabled={busy === inv.conversationId} onClick={() => respond(inv.conversationId, false)}>
-            Decline
-          </button>
-          <button className="btn btn-primary btn-sm" disabled={busy === inv.conversationId} onClick={() => respond(inv.conversationId, true)}>
-            Join · 🪙 {joinCost}
-          </button>
+          {/* The buttons drop under the name on narrow phones. */}
+          <div className="ml-auto flex shrink-0 gap-2">
+            <button className="btn btn-ghost btn-sm" disabled={busy === inv.conversationId} onClick={() => respond(inv.conversationId, false)}>
+              Decline
+            </button>
+            <button className="btn btn-primary btn-sm" disabled={busy === inv.conversationId} onClick={() => respond(inv.conversationId, true)}>
+              Join · 🪙 {joinCost}
+            </button>
+          </div>
         </div>
       ))}
     </div>

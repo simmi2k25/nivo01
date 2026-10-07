@@ -187,8 +187,9 @@ export async function postMessage(opts: {
   if (senderId) await assertNotBlocked(conversationId, senderId);
   let replyToId: number | null = null;
   if (opts.replyToId) {
-    const target = await query('SELECT 1 FROM messages WHERE id = $1 AND conversation_id = $2', [opts.replyToId, conversationId]);
-    if (!target.rowCount) throw fail(400, 'That message isn’t in this chat');
+    // The original is usually already delivered and deleted here; if it's still around, it must be in this chat.
+    const target = await query<{ conversation_id: number }>('SELECT conversation_id FROM messages WHERE id = $1', [opts.replyToId]);
+    if (target.rows[0] && target.rows[0].conversation_id !== conversationId) throw fail(400, 'That message isn’t in this chat');
     replyToId = opts.replyToId;
   }
   const r = await query<MessageRow>(

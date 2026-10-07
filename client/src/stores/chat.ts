@@ -289,7 +289,7 @@ async function handle(m: Message, live: boolean) {
 
   if (m.replyToId && !m.replyTo) {
     const t = await local.getMessage(m.replyToId);
-    if (t) m = { ...m, replyTo: local.quoteOf(t) };
+    if (t && t.conversationId === m.conversationId) m = { ...m, replyTo: local.quoteOf(t) };
   }
   const already = await local.getMessage(m.id);
   await local.putMessages([already ? { ...m, reactions: already.reactions ?? m.reactions } : m]);

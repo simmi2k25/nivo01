@@ -106,7 +106,8 @@ async function withQuotes(items: Message[]) {
   return items.map((m) => {
     if (!m.replyToId) return m;
     const t = byId.get(m.replyToId);
-    return t ? { ...m, replyTo: quoteOf(t) } : m;
+    // Only quote a message from the same chat.
+    return t && t.conversationId === m.conversationId ? { ...m, replyTo: quoteOf(t) } : m;
   });
 }
 
