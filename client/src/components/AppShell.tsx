@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../stores/auth';
 import { useChat } from '../stores/chat';
 import { Avatar } from './Avatar';
+import { CoinStore } from './CoinStore';
 import { Icon, type IconName } from './Icon';
 
 const TABS: { to: string; label: string; icon: IconName }[] = [
@@ -47,6 +48,7 @@ export function AppShell() {
       <main className="relative min-w-0 flex-1">
         <Outlet />
       </main>
+      <CoinStore />
 
       {/* Phone floating tab bar */}
       {!immersive && (

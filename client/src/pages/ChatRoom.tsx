@@ -9,12 +9,14 @@ import { blockUser, unblockUser } from '../lib/actions';
 import { api, errorText } from '../lib/api';
 import { convTitle, others } from '../lib/conv';
 import { dayLabel, isSameDay, lastSeen, linkify, timeOf } from '../lib/format';
+import { prepareImage } from '../lib/image';
 import { downloadImage } from '../lib/share';
 import { sendTyping } from '../lib/socket';
 import { stickerUrl } from '../lib/stickers';
 import { REACTIONS, type Conversation, type Message, type ReplyPreview, type Room, type User } from '../lib/types';
 import { useAuth } from '../stores/auth';
 import { typingIn, useChat } from '../stores/chat';
+import { useCoins } from '../stores/coins';
 import { FriendPicker, GroupAvatar } from './Chats';
 
 /** What the composer is doing besides a new message: replying to one, or editing one of yours. */
@@ -164,6 +166,34 @@ function ChatMenu({ conv, me, open, onClose }: { conv: Conversation; me: User; o
     }
   }
 
+  const wallpaperInput = useRef<HTMLInputElement>(null);
+  const wallpaperCost = useCoins((s) => s.prices.wallpaper);
+
+  async function setWallpaper(file?: File) {
+    if (!file) return;
+    if (!confirm(`Set this as the wallpaper for everyone in this chat for ${wallpaperCost} coins?`)) return;
+    try {
+      const blob = await prepareImage(file, { max: 1440, quality: 0.82 });
+      const r = await api<{ coins: number; conversation: Conversation }>(`/conversations/${conv.id}/wallpaper`, { method: 'PUT', raw: blob });
+      useCoins.getState().setBalance({ coins: r.coins });
+      upsert(r.conversation);
+      toast('Wallpaper set 🖼️');
+      onClose();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    }
+  }
+
+  async function removeWallpaper() {
+    try {
+      const r = await api<{ conversation: Conversation }>(`/conversations/${conv.id}/wallpaper`, { method: 'DELETE' });
+      upsert(r.conversation);
+      onClose();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    }
+  }
+
   async function toggleBlock() {
     const other = others(conv, me.id)[0];
     if (!other) return;
@@ -222,6 +252,19 @@ function ChatMenu({ conv, me, open, onClose }: { conv: Conversation; me: User; o
               </button>
             </form>
           )}
+          {!conv.block && (
+            <button className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left font-bold hover:bg-surface-2" onClick={() => wallpaperInput.current?.click()}>
+              <Icon name="image" className="text-primary" />
+              <span className="flex-1">{conv.wallpaperUrl ? 'Change chat wallpaper' : 'Set chat wallpaper'}</span>
+              <span className="text-sm font-extrabold text-[#8a5a00]">🪙 {wallpaperCost}</span>
+            </button>
+          )}
+          {conv.wallpaperUrl && (
+            <button className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left font-bold hover:bg-surface-2" onClick={removeWallpaper}>
+              <Icon name="trash" className="text-primary" /> Remove wallpaper
+            </button>
+          )}
+          <input ref={wallpaperInput} type="file" accept="image/*" hidden onChange={(e) => (setWallpaper(e.target.files?.[0]), (e.target.value = ''))} />
           <button className="flex items-center gap-3 rounded-2xl px-3 py-3 text-left font-bold hover:bg-surface-2" onClick={() => patch({ muted: !conv.muted })}>
             <Icon name={conv.muted ? 'bell' : 'bellOff'} className="text-primary" />
             {conv.muted ? 'Unmute notifications' : 'Mute this chat'}
@@ -338,7 +381,10 @@ function MessageList({
     : [];
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div
+      className="relative min-h-0 flex-1 bg-cover bg-center"
+      style={conv.wallpaperUrl ? { backgroundImage: `linear-gradient(var(--wallpaper-veil), var(--wallpaper-veil)), url(${conv.wallpaperUrl})` } : undefined}
+    >
       <div ref={ref} onScroll={onScroll} className="scroll-thin h-full overflow-y-auto px-3 py-3 md:px-6">
         {loaded && !hasMore && (
           <div className="anim-fade py-6 text-center">

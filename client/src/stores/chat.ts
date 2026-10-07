@@ -4,7 +4,8 @@ import { api } from '../lib/api';
 import { convTitle, preview } from '../lib/conv';
 import * as local from '../lib/localdb';
 import { notify } from '../lib/notify';
-import type { Conversation, Friend, Message, User } from '../lib/types';
+import type { Conversation, Friend, GroupInvite, Message, User } from '../lib/types';
+import { useCoins } from './coins';
 import { useAuth } from './auth';
 
 type Thread = { items: Message[]; hasMore: boolean; loading: boolean; loaded: boolean };
@@ -24,8 +25,11 @@ type ChatState = {
   /** conversationId → userId → expiry timestamp */
   typing: Record<number, Record<number, number>>;
   activeId: number | null;
+  /** Group invitations waiting for you to join (with a coin) or decline. */
+  invites: GroupInvite[];
 
   reset: () => void;
+  loadInvites: () => Promise<void>;
   loadConversations: () => Promise<void>;
   /** Server data keeps the last message and unread count this device worked out; `local` sets them as given. */
   upsertConversation: (c: Conversation, opts?: { local?: boolean }) => void;
@@ -69,11 +73,17 @@ export const useChat = create<ChatState>((set, get) => ({
   friendsLoaded: false,
   typing: {},
   activeId: null,
+  invites: [],
+
+  async loadInvites() {
+    const r = await api<{ invites: GroupInvite[] }>('/conversations/invites');
+    set({ invites: r.invites });
+  },
 
   reset() {
     local.closeLocal();
     pendingAcks.clear();
-    set({ conversations: [], conversationsLoaded: false, threads: {}, friends: [], addedMe: [], friendsLoaded: false, typing: {}, activeId: null });
+    set({ conversations: [], conversationsLoaded: false, threads: {}, friends: [], addedMe: [], friendsLoaded: false, typing: {}, activeId: null, invites: [] });
   },
 
   async loadConversations() {
@@ -446,6 +456,7 @@ export function bindChatSocket(s: Socket) {
   s.on('connect', () => {
     // Catch up on anything that arrived while disconnected.
     st().sync().catch(() => {});
+    st().loadInvites().catch(() => {});
     if (st().friendsLoaded) st().loadFriends().catch(() => {});
   });
   s.on('message:new', (m: Message) => st().receive(m));
@@ -490,6 +501,34 @@ export function bindChatSocket(s: Socket) {
       user,
       tag: `friend:${user.id}`,
     });
+  });
+  s.on('coins:changed', (b: { coins: number; memorySlots: number }) => useCoins.getState().setBalance(b));
+  s.on('coins:gift', ({ from, amount, note }: { from: User | null; amount: number; note: string | null }) => {
+    notify({
+      title: `${from?.displayName ?? 'A friend'} sent you ${amount} ${amount === 1 ? 'coin' : 'coins'} 🪙`,
+      body: note || 'Tap the coin button to see your balance',
+      to: '/chats',
+      user: from ?? undefined,
+      tag: `gift:${from?.id ?? 0}`,
+    });
+  });
+  s.on('invites:changed', () => {
+    const before = st().invites.length;
+    st()
+      .loadInvites()
+      .then(() => {
+        const inv = st().invites[0];
+        if (st().invites.length > before && inv) {
+          notify({
+            title: `${inv.invitedBy?.displayName ?? 'Someone'} invited you to ${inv.title || 'a group'}`,
+            body: 'Open Chats to join',
+            to: '/chats',
+            user: inv.invitedBy ?? undefined,
+            tag: `invite:${inv.conversationId}`,
+          });
+        }
+      })
+      .catch(() => {});
   });
   s.on('typing', ({ conversationId, userId, typing }: { conversationId: number; userId: number; typing: boolean }) => {
     const cur = { ...(st().typing[conversationId] ?? {}) };

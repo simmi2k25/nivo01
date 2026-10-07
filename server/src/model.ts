@@ -218,7 +218,7 @@ export async function postMessage(opts: {
 /** Builds full conversation summaries for a user in three queries, regardless of chat count. */
 export async function conversationsFor(userId: number, onlyId?: number) {
   const convs = await query(
-    `SELECT c.id, c.is_group, c.title, c.created_by, c.created_at, c.updated_at, m.last_read_at, m.muted
+    `SELECT c.id, c.is_group, c.title, c.created_by, c.created_at, c.updated_at, c.wallpaper_id, m.last_read_at, m.muted
        FROM conversations c JOIN conversation_members m ON m.conversation_id = c.id AND m.user_id = $1
       WHERE ($2::bigint IS NULL OR c.id = $2)
       ORDER BY c.updated_at DESC LIMIT 200`,
@@ -281,6 +281,7 @@ export async function conversationsFor(userId: number, onlyId?: number) {
       members: ms.map((m) => m.user),
       readStates: Object.fromEntries(ms.map((m) => [m.user.id, m.lastReadAt])),
       block,
+      wallpaperUrl: c.wallpaper_id ? `/api/conversations/wallpapers/${c.wallpaper_id}` : null,
     };
   });
 }

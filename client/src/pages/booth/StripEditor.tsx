@@ -8,6 +8,7 @@ import { canvasToBlob } from '../../lib/image';
 import { downloadImage, shareImage } from '../../lib/share';
 import { PACKS, stickerUrl } from '../../lib/stickers';
 import type { Photo } from '../../lib/types';
+import { useCoins } from '../../stores/coins';
 import { composeStrip, FILTERS, FRAMES, PATTERNS, type Layout, type PlacedSticker, type Shots, type StripOptions } from './composer';
 
 type Tab = 'layout' | 'frame' | 'filter' | 'stickers' | 'text';
@@ -38,7 +39,34 @@ export function StripEditor({ shots, names, roomCode, conversationId, onAgain, o
     caption: '',
     showDate: true,
     names,
+    watermark: true,
   });
+  // Removing the wordmark is paid once per photobooth; remember if they already have.
+  const [noMarkPaid, setNoMarkPaid] = useState(false);
+  const watermarkCost = useCoins((s) => s.prices.watermark);
+  useEffect(() => {
+    api<{ unlocked: boolean }>(`/coins/watermark/${roomCode}`)
+      .then((r) => {
+        setNoMarkPaid(r.unlocked);
+        if (r.unlocked) setOpts((o) => ({ ...o, watermark: false }));
+      })
+      .catch(() => {});
+  }, [roomCode]);
+
+  async function toggleWatermark() {
+    if (!opts.watermark) return set({ watermark: true });
+    if (noMarkPaid) return set({ watermark: false });
+    if (!confirm(`Remove the NivoTalk watermark from your strips in this photobooth for ${watermarkCost} coins?`)) return;
+    try {
+      const r = await api<{ coins: number | null }>(`/coins/watermark/${roomCode}`, { method: 'POST' });
+      if (r.coins !== null) useCoins.getState().setBalance({ coins: r.coins });
+      setNoMarkPaid(true);
+      set({ watermark: false });
+      toast('Watermark removed ✨');
+    } catch (e) {
+      toast(errorText(e), 'error');
+    }
+  }
   const [stickers, setStickers] = useState<PlacedSticker[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('layout');
@@ -211,6 +239,11 @@ export function StripEditor({ shots, names, roomCode, conversationId, onAgain, o
               <label className="flex items-center gap-2 px-1 text-sm font-semibold text-muted">
                 <input type="checkbox" checked={opts.showDate} onChange={(e) => set({ showDate: e.target.checked })} className="h-[18px] w-[18px] accent-[var(--primary)]" />
                 Add the date
+              </label>
+              <label className="flex items-center gap-2 px-1 text-sm font-semibold text-muted">
+                <input type="checkbox" checked={!opts.watermark} onChange={toggleWatermark} className="h-[18px] w-[18px] accent-[var(--primary)]" />
+                <span className="flex-1">Remove NivoTalk watermark</span>
+                {!noMarkPaid && <span className="text-xs font-extrabold text-[#8a5a00]">🪙 {watermarkCost}</span>}
               </label>
             </div>
           )}

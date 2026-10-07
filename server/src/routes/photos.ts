@@ -8,8 +8,10 @@ import { emitToUsers } from '../realtime/hub.js';
 
 const router = Router();
 const MAX_BYTES = 6 * 1024 * 1024;
-/** Strips each person can keep in Memories (keeps the free database small). */
-export const MAX_PHOTOS = 5;
+/** Strips each person can keep in Memories: 5 free, more bought with coins (users.memory_slots). */
+async function slotsOf(userId: number) {
+  return (await one<{ memory_slots: number }>('SELECT memory_slots FROM users WHERE id = $1', [userId]))?.memory_slots ?? 5;
+}
 
 const photoUrl = (id: number) => `/api/photos/${id}`;
 
@@ -24,8 +26,9 @@ router.post('/', express.raw({ type: () => true, limit: MAX_BYTES }), async (req
   if (!info) throw fail(415, 'Strips must be JPEG, PNG or WebP');
   if (info.width > 8000 || info.height > 8000) throw fail(413, 'That image is too large');
   const count = await one<{ n: number }>('SELECT count(*)::int AS n FROM photos WHERE owner_id = $1', [req.userId]);
-  if ((count?.n ?? 0) >= MAX_PHOTOS) {
-    throw fail(409, `Memories is full (${MAX_PHOTOS} strips). Delete one in Memories to save this strip.`);
+  const slots = await slotsOf(req.userId);
+  if ((count?.n ?? 0) >= slots) {
+    throw fail(409, `Memories is full (${slots} strips). Delete one, or get more space with coins.`);
   }
   const row = await one<{ id: number; created_at: Date }>(
     `INSERT INTO photos (owner_id, room_code, mime, size, data) VALUES ($1, $2, $3, $4, $5)
@@ -43,7 +46,7 @@ router.get('/', async (req, res) => {
     [req.userId],
   );
   res.json({
-    limit: MAX_PHOTOS,
+    limit: await slotsOf(req.userId),
     photos: r.rows.map((p) => ({ id: p.id, url: photoUrl(p.id), roomCode: p.room_code, size: p.size, createdAt: p.created_at })),
   });
 });

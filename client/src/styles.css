@@ -408,3 +408,11 @@ textarea {
 .msg-flash {
   animation: msg-flash 1.4s ease-out;
 }
+
+/* Softens a chat wallpaper so bubbles stay readable. */
+:root {
+  --wallpaper-veil: rgba(242, 245, 254, 0.35);
+}
+:root[data-theme='dark'] {
+  --wallpaper-veil: rgba(21, 26, 51, 0.55);
+}

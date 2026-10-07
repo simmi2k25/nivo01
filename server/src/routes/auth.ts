@@ -84,8 +84,11 @@ router.get('/me', requireAuth, async (req, res) => {
     clearSessionCookie(res);
     throw fail(401, 'Please log in');
   }
-  const extra = await one<{ email: string }>('SELECT email FROM users WHERE id = $1', [req.userId]);
-  res.json({ user: { ...user, email: extra?.email } });
+  const extra = await one<{ email: string; coins: number; memory_slots: number }>(
+    'SELECT email, coins, memory_slots FROM users WHERE id = $1',
+    [req.userId],
+  );
+  res.json({ user: { ...user, email: extra?.email, coins: extra?.coins ?? 0, memorySlots: extra?.memory_slots ?? 5 } });
 });
 
 router.get('/check-username', async (req, res) => {

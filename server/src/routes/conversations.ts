@@ -1,5 +1,6 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
+import { PRICES, pushBalance, spend } from '../coins.js';
 import { one, query, tx } from '../db.js';
 import { fail, idParam, parse } from '../http.js';
 import {
@@ -15,6 +16,8 @@ import {
   STICKER_ID,
   type MessageRow,
 } from '../model.js';
+import { sniffImage } from '../images.js';
+import { pushToUsers } from '../push.js';
 import { emitToUsers } from '../realtime/hub.js';
 
 const router = Router();
@@ -40,6 +43,18 @@ async function pushConversation(event: 'conversation:new' | 'conversation:update
 }
 
 const nameOf = async (id: number) => (await getUser(id))?.displayName ?? 'Someone';
+
+/** Drops anyone who blocked, or was blocked by, `me`. */
+async function notBlocked(me: number, ids: number[]) {
+  if (!ids.length) return ids;
+  const r = await query<{ id: number }>(
+    `SELECT b.blocked_id AS id FROM blocks b WHERE b.blocker_id = $1 AND b.blocked_id = ANY($2::bigint[])
+     UNION SELECT b.blocker_id FROM blocks b WHERE b.blocked_id = $1 AND b.blocker_id = ANY($2::bigint[])`,
+    [me, ids],
+  );
+  const blocked = new Set(r.rows.map((x) => x.id));
+  return ids.filter((x) => !blocked.has(x));
+}
 
 router.get('/', async (req, res) => {
   res.json({ conversations: await conversationsFor(req.userId) });
@@ -99,19 +114,18 @@ router.post('/group', async (req, res) => {
   const found = await query<{ id: number }>('SELECT id FROM users WHERE id = ANY($1::bigint[])', [ids]);
   if (found.rowCount !== ids.length) throw fail(400, 'Some people couldn’t be found');
 
+  // Starting a group costs coins; the people picked get an invitation they accept with a coin.
   const id = await tx(async (c) => {
     const conv = await c.query<{ id: number }>(
       'INSERT INTO conversations (is_group, title, created_by) VALUES (true, $1, $2) RETURNING id',
       [body.title || null, req.userId],
     );
     const cid = conv.rows[0].id;
-    await c.query(
-      `INSERT INTO conversation_members (conversation_id, user_id)
-       SELECT $1, unnest($2::bigint[])`,
-      [cid, [req.userId, ...ids]],
-    );
+    await spend(c, req.userId, PRICES.groupCreate, 'group_create', { conversationId: cid });
+    await c.query('INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2)', [cid, req.userId]);
     return cid;
   });
+  await pushBalance(req.userId);
   await postMessage({
     conversationId: id,
     senderId: null,
@@ -119,8 +133,157 @@ router.post('/group', async (req, res) => {
     body: `${await nameOf(req.userId)} created the group`,
     meta: { event: 'created', by: req.userId },
   });
-  await pushConversation('conversation:new', id, ids);
+  await invite(id, req.userId, await notBlocked(req.userId, ids));
   res.status(201).json({ conversation: await summaryFor(req.userId, id) });
+});
+
+// ---------- group invitations (creating a group costs coins; invited people join with a coin) ----------
+
+/** Invites people to a group; they appear in the group once they accept. */
+async function invite(conversationId: number, by: number, userIds: number[]) {
+  if (!userIds.length) return;
+  await query(
+    `INSERT INTO group_invites (conversation_id, user_id, invited_by) SELECT $1, unnest($2::bigint[]), $3
+     ON CONFLICT DO NOTHING`,
+    [conversationId, userIds, by],
+  );
+  const [inviter, conv] = await Promise.all([
+    getUser(by),
+    one<{ title: string | null }>('SELECT title FROM conversations WHERE id = $1', [conversationId]),
+  ]);
+  const group = conv?.title || 'a group';
+  emitToUsers(userIds, 'invites:changed', {});
+  for (const uid of userIds) {
+    notifyInvite(uid, inviter?.displayName ?? 'Someone', group);
+  }
+}
+
+function notifyInvite(userId: number, inviter: string, group: string) {
+  pushToUsers([userId], {
+    title: `${inviter} invited you to ${group}`,
+    body: `Join for ${PRICES.groupJoin} coin`,
+    to: '/chats',
+    tag: 'invites',
+  }).catch(() => {});
+}
+
+router.get('/invites', async (req, res) => {
+  const r = await query<{ conversation_id: number; title: string | null; invited_by: number | null; created_at: Date; members: number }>(
+    `SELECT gi.conversation_id, c.title, gi.invited_by, gi.created_at,
+            (SELECT count(*)::int FROM conversation_members cm WHERE cm.conversation_id = gi.conversation_id) AS members
+       FROM group_invites gi JOIN conversations c ON c.id = gi.conversation_id
+      WHERE gi.user_id = $1 ORDER BY gi.created_at DESC`,
+    [req.userId],
+  );
+  const invites = await Promise.all(
+    r.rows.map(async (i) => ({
+      conversationId: i.conversation_id,
+      title: i.title,
+      memberCount: i.members,
+      invitedBy: i.invited_by ? await getUser(i.invited_by) : null,
+      createdAt: i.created_at,
+    })),
+  );
+  res.json({ invites, price: PRICES.groupJoin });
+});
+
+router.post('/:id/join', async (req, res) => {
+  const id = parse(idParam, req.params.id);
+  const coins = await tx(async (c) => {
+    const inv = await c.query('DELETE FROM group_invites WHERE conversation_id = $1 AND user_id = $2 RETURNING 1', [id, req.userId]);
+    if (!inv.rowCount) throw fail(404, 'This invitation is no longer available');
+    const n = await c.query<{ n: number }>('SELECT count(*)::int AS n FROM conversation_members WHERE conversation_id = $1', [id]);
+    if (n.rows[0].n >= MAX_GROUP) throw fail(400, `Groups hold up to ${MAX_GROUP} people`);
+    const left = await spend(c, req.userId, PRICES.groupJoin, 'group_join', { conversationId: id });
+    await c.query('INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, req.userId]);
+    return left;
+  });
+  await pushBalance(req.userId);
+  emitToUsers([req.userId], 'invites:changed', {});
+  const others = (await memberIds(id)).filter((u) => u !== req.userId);
+  await postMessage({
+    conversationId: id,
+    senderId: null,
+    kind: 'system',
+    body: `${await nameOf(req.userId)} joined the group`,
+    meta: { event: 'joined', userId: req.userId },
+  });
+  await pushConversation('conversation:updated', id, others);
+  res.json({ coins, conversation: await summaryFor(req.userId, id) });
+});
+
+router.post('/:id/decline', async (req, res) => {
+  const id = parse(idParam, req.params.id);
+  await query('DELETE FROM group_invites WHERE conversation_id = $1 AND user_id = $2', [id, req.userId]);
+  emitToUsers([req.userId], 'invites:changed', {});
+  res.json({ ok: true });
+});
+
+// ---------- chat wallpaper (costs coins; everyone in the chat sees it) ----------
+
+const WALLPAPER_BYTES = 3 * 1024 * 1024;
+
+router.get('/wallpapers/:wid', async (req, res) => {
+  const wid = parse(idParam, req.params.wid);
+  const w = await one<{ mime: string; data: Buffer }>(
+    `SELECT w.mime, w.data FROM chat_wallpapers w
+       JOIN conversation_members cm ON cm.conversation_id = w.conversation_id AND cm.user_id = $2
+      WHERE w.id = $1`,
+    [wid, req.userId],
+  );
+  if (!w) throw fail(404, 'Wallpaper not found');
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  res.type(w.mime).send(w.data);
+});
+
+router.put('/:id/wallpaper', express.raw({ type: () => true, limit: WALLPAPER_BYTES }), async (req, res) => {
+  const id = parse(idParam, req.params.id);
+  await requireMember(id, req.userId);
+  const buf = req.body as Buffer;
+  if (!Buffer.isBuffer(buf) || !buf.length) throw fail(400, 'No image received');
+  const info = sniffImage(buf);
+  if (!info) throw fail(415, 'Please use a JPEG, PNG or WebP image');
+  if (info.width > 4000 || info.height > 4000) throw fail(413, 'That image is too large');
+  const coins = await tx(async (c) => {
+    const left = await spend(c, req.userId, PRICES.wallpaper, 'wallpaper', { conversationId: id });
+    const old = await c.query<{ wallpaper_id: number | null }>('SELECT wallpaper_id FROM conversations WHERE id = $1 FOR UPDATE', [id]);
+    const w = await c.query<{ id: number }>(
+      'INSERT INTO chat_wallpapers (conversation_id, set_by, mime, data) VALUES ($1, $2, $3, $4) RETURNING id',
+      [id, req.userId, info.mime, buf],
+    );
+    await c.query('UPDATE conversations SET wallpaper_id = $2 WHERE id = $1', [id, w.rows[0].id]);
+    if (old.rows[0]?.wallpaper_id) await c.query('DELETE FROM chat_wallpapers WHERE id = $1', [old.rows[0].wallpaper_id]);
+    return left;
+  });
+  await pushBalance(req.userId);
+  await postMessage({
+    conversationId: id,
+    senderId: null,
+    kind: 'system',
+    body: `${await nameOf(req.userId)} set a new chat wallpaper 🖼️`,
+    meta: { event: 'wallpaper', by: req.userId },
+  });
+  await pushConversation('conversation:updated', id, await memberIds(id));
+  res.json({ coins, conversation: await summaryFor(req.userId, id) });
+});
+
+router.delete('/:id/wallpaper', async (req, res) => {
+  const id = parse(idParam, req.params.id);
+  await requireMember(id, req.userId);
+  const old = await one<{ wallpaper_id: number | null }>('SELECT wallpaper_id FROM conversations WHERE id = $1', [id]);
+  if (old?.wallpaper_id) {
+    await query('UPDATE conversations SET wallpaper_id = NULL WHERE id = $1', [id]);
+    await query('DELETE FROM chat_wallpapers WHERE id = $1', [old.wallpaper_id]);
+    await postMessage({
+      conversationId: id,
+      senderId: null,
+      kind: 'system',
+      body: `${await nameOf(req.userId)} removed the chat wallpaper`,
+      meta: { event: 'wallpaper', by: req.userId },
+    });
+    await pushConversation('conversation:updated', id, await memberIds(id));
+  }
+  res.json({ conversation: await summaryFor(req.userId, id) });
 });
 
 router.get('/:id', async (req, res) => {
@@ -168,7 +331,7 @@ router.post('/:id/members', async (req, res) => {
   if (!conv?.is_group) throw fail(400, 'You can only invite people to groups');
 
   const current = await memberIds(id);
-  const fresh = [...new Set(userIds)].filter((u) => !current.includes(u));
+  const fresh = await notBlocked(req.userId, [...new Set(userIds)].filter((u) => !current.includes(u)));
   if (!fresh.length) throw fail(400, 'They’re already here');
   if (current.length + fresh.length > MAX_GROUP) throw fail(400, `Groups hold up to ${MAX_GROUP} people`);
   const found = await query<{ id: number; display_name: string }>(
@@ -177,11 +340,7 @@ router.post('/:id/members', async (req, res) => {
   );
   if (found.rowCount !== fresh.length) throw fail(400, 'Some people couldn’t be found');
 
-  await query(
-    `INSERT INTO conversation_members (conversation_id, user_id) SELECT $1, unnest($2::bigint[])
-     ON CONFLICT DO NOTHING`,
-    [id, fresh],
-  );
+  await invite(id, req.userId, fresh);
   await postMessage({
     conversationId: id,
     senderId: null,
@@ -189,8 +348,6 @@ router.post('/:id/members', async (req, res) => {
     body: `${await nameOf(req.userId)} invited ${found.rows.map((r) => r.display_name).join(', ')}`,
     meta: { event: 'invited', by: req.userId, userIds: fresh },
   });
-  await pushConversation('conversation:new', id, fresh);
-  await pushConversation('conversation:updated', id, current);
   res.json({ conversation: await summaryFor(req.userId, id) });
 });
 

@@ -46,6 +46,8 @@ export type StripOptions = {
   caption: string;
   showDate: boolean;
   names: string[];
+  /** The NivoTalk wordmark in the footer; removing it costs coins once per photobooth. */
+  watermark: boolean;
 };
 
 /** shots[shot] = that shot's frames, one per participant (in join order). */
@@ -226,10 +228,12 @@ export async function composeStrip(canvas: HTMLCanvasElement, shots: Shots, o: S
     ctx.textAlign = 'center';
     if (o.caption.trim()) {
       ctx.font = '600 54px Caveat, cursive';
-      ctx.fillText(o.caption.trim().slice(0, 40), cx, top + 70, width - 60);
-      ctx.font = '40px Pacifico, cursive';
-      ctx.fillText('NivoTalk', cx, top + 132);
-    } else {
+      ctx.fillText(o.caption.trim().slice(0, 40), cx, top + (o.watermark ? 70 : 100), width - 60);
+      if (o.watermark) {
+        ctx.font = '40px Pacifico, cursive';
+        ctx.fillText('NivoTalk', cx, top + 132);
+      }
+    } else if (o.watermark) {
       ctx.font = '56px Pacifico, cursive';
       ctx.fillText('NivoTalk', cx, top + 96);
     }

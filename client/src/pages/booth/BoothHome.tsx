@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { CoinButton } from '../../components/CoinStore';
 import { Icon } from '../../components/Icon';
 import { toast } from '../../components/Toast';
 import { api, errorText } from '../../lib/api';
@@ -63,7 +64,7 @@ export default function BoothHome() {
             <h1 className="text-[30px] leading-tight font-bold">Photobooth</h1>
             <p className="text-muted">Capture. Create. Keep.</p>
           </div>
-          <Icon name="camera" size={40} strokeWidth={1.5} className="anim-float text-primary" />
+          <CoinButton />
         </header>
 
         {/* hero */}

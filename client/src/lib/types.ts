@@ -21,7 +21,10 @@ export type User = {
   song: Song | null;
   lastSeenAt: string | null;
   online: boolean;
+  /** Only on your own account. */
   email?: string;
+  coins?: number;
+  memorySlots?: number;
 };
 
 export type Friend = User & { favorite: boolean; mutual: boolean; addedAt: string };
@@ -70,7 +73,11 @@ export type Conversation = {
   readStates: Record<string, string>;
   /** Direct chats only: who blocked whom (you can read old messages but not send). */
   block?: 'byMe' | 'byThem' | null;
+  /** A background picture everyone in the chat sees (set with coins). */
+  wallpaperUrl?: string | null;
 };
+
+export type GroupInvite = { conversationId: number; title: string | null; memberCount: number; invitedBy: User | null; createdAt: string };
 
 export type Room = {
   code: string;

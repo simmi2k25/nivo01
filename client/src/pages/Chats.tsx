@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Avatar } from '../components/Avatar';
+import { CoinButton } from '../components/CoinStore';
 import { Icon } from '../components/Icon';
 import { Sheet } from '../components/Sheet';
 import { toast } from '../components/Toast';
@@ -12,6 +13,7 @@ import type { Conversation, User } from '../lib/types';
 import { useAuth } from '../stores/auth';
 import { typingIn, useChat } from '../stores/chat';
 import { ChatRoom } from './ChatRoom';
+import { useCoins } from '../stores/coins';
 
 export function ChatsPage() {
   const { id } = useParams();
@@ -92,7 +94,8 @@ function ConversationList({ activeId }: { activeId: number | null }) {
       <header className="safe-top px-5 pt-4">
         <div className="flex items-center justify-between">
           <h1 className="text-[28px] font-bold">Chats</h1>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
+            <CoinButton />
             <button className="icon-btn" onClick={() => setNewGroup(true)} aria-label="New group chat">
               <Icon name="group" />
             </button>
@@ -108,6 +111,7 @@ function ConversationList({ activeId }: { activeId: number | null }) {
       </header>
 
       <div className="scroll-thin mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-28 md:pb-4">
+        <GroupInvites />
         {!conversationsLoaded && <ListSkeleton />}
         {conversationsLoaded && conversations.length === 0 && (
           <div className="anim-rise px-6 py-12 text-center">
@@ -219,12 +223,66 @@ export function FriendPicker({ selected, onToggle, exclude = [] }: { selected: n
   );
 }
 
+/** Group invitations: join with a coin, or decline. */
+function GroupInvites() {
+  const invites = useChat((s) => s.invites);
+  const joinCost = useCoins((s) => s.prices.groupJoin);
+  const nav = useNavigate();
+  const [busy, setBusy] = useState<number | null>(null);
+  if (!invites.length) return null;
+
+  async function respond(id: number, join: boolean) {
+    setBusy(id);
+    try {
+      if (join) {
+        const r = await api<{ coins: number; conversation: Conversation }>(`/conversations/${id}/join`, { method: 'POST' });
+        useCoins.getState().setBalance({ coins: r.coins });
+        useChat.getState().upsertConversation(r.conversation);
+        nav(`/chats/${id}`);
+      } else {
+        await api(`/conversations/${id}/decline`, { method: 'POST' });
+      }
+      await useChat.getState().loadInvites();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mb-2 grid gap-2 px-1">
+      {invites.map((inv) => (
+        <div key={inv.conversationId} className="anim-rise flex items-center gap-3 rounded-2xl bg-primary-soft/70 px-3 py-2.5">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-primary">
+            <Icon name="group" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold">{inv.title || 'Group chat'}</p>
+            <p className="truncate text-xs text-muted">
+              {inv.invitedBy?.displayName ?? 'Someone'} invited you · {inv.memberCount} {inv.memberCount === 1 ? 'member' : 'members'}
+            </p>
+          </div>
+          <button className="btn btn-ghost btn-sm" disabled={busy === inv.conversationId} onClick={() => respond(inv.conversationId, false)}>
+            Decline
+          </button>
+          <button className="btn btn-primary btn-sm" disabled={busy === inv.conversationId} onClick={() => respond(inv.conversationId, true)}>
+            Join · 🪙 {joinCost}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NewGroupSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const nav = useNavigate();
   const upsert = useChat((s) => s.upsertConversation);
   const [title, setTitle] = useState('');
   const [selected, setSelected] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
+  const groupCost = useCoins((s) => s.prices.groupCreate);
+  const joinCost = useCoins((s) => s.prices.groupJoin);
 
   async function create() {
     setBusy(true);
@@ -254,8 +312,11 @@ function NewGroupSheet({ open, onClose }: { open: boolean; onClose: () => void }
         <FriendPicker selected={selected} onToggle={(u) => setSelected((s) => (s.includes(u.id) ? s.filter((x) => x !== u.id) : [...s, u.id].slice(0, 29)))} />
       </div>
       <button className="btn btn-primary sticky bottom-0 mt-3 w-full" disabled={!selected.length || busy} onClick={create}>
-        Create group{selected.length ? ` (${selected.length + 1})` : ''}
+        Create group · 🪙 {groupCost}
       </button>
+      <p className="mt-2 text-center text-xs text-muted">
+        Friends you pick get an invitation and join for 🪙 {joinCost}.
+      </p>
     </Sheet>
   );
 }

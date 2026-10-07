@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Avatar, BuddyAvatar } from '../components/Avatar';
 import { Icon, type IconName } from '../components/Icon';
+import { CoinButton } from '../components/CoinStore';
 import { Loader } from '../components/Loader';
 import { PhotoCropper } from '../components/PhotoCropper';
 import { ProfileStage } from '../components/ProfileStage';
@@ -20,6 +21,7 @@ import { applyBubble, applyTheme, BUBBLES, getPref, getTheme, setPref } from '..
 import { BUDDIES, BUDDY_NAMES } from '../lib/stickers';
 import type { Buddy, ProfileUser, Song, User } from '../lib/types';
 import { useAuth } from '../stores/auth';
+import { useCoins } from '../stores/coins';
 import { useChat } from '../stores/chat';
 
 function ActionButton({ icon, label, onClick, disabled }: { icon: IconName; label: string; onClick: () => void; disabled?: boolean }) {
@@ -95,7 +97,8 @@ export function MyProfilePage() {
     <ProfileStage cover={me.coverUrl} buddy={me.avatar}>
       <div className="safe-top flex items-start justify-between gap-2 p-4">
         <div className="min-w-0">{me.song && <SongCard song={me.song} />}</div>
-        <div className="flex shrink-0 gap-1">
+        <div className="flex shrink-0 items-center gap-1">
+          <CoinButton light />
           <button className="icon-btn !text-white hover:!bg-white/20" onClick={() => setParams({ qr: '1' })} aria-label="My QR ID">
             <Icon name="qr" />
           </button>
@@ -507,6 +510,65 @@ function SettingRow({
   );
 }
 
+/** Send coins to a friend; a note shows up in your chat with them. */
+function GiftSheet({ open, onClose, to }: { open: boolean; onClose: () => void; to: User }) {
+  const coins = useCoins((s) => s.coins);
+  const [amount, setAmount] = useState(5);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function send() {
+    setBusy(true);
+    try {
+      const r = await api<{ coins: number }>('/coins/gift', { body: { userId: to.id, amount, note: note.trim() || undefined } });
+      useCoins.getState().setBalance({ coins: r.coins });
+      toast(`Sent ${amount} ${amount === 1 ? 'coin' : 'coins'} to ${to.displayName} 🪙`);
+      setNote('');
+      onClose();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Sheet open={open} onClose={onClose} title={`Gift coins to ${to.displayName}`}>
+      <div className="grid gap-3">
+        <p className="text-sm text-muted">You have 🪙 {coins}</p>
+        <div className="flex gap-2">
+          {[1, 5, 10, 25].map((n) => (
+            <button key={n} className="chip flex-1 justify-center" aria-pressed={amount === n} onClick={() => setAmount(n)}>
+              🪙 {n}
+            </button>
+          ))}
+        </div>
+        <label className="field h-11">
+          <span className="text-sm font-bold text-muted">Amount</span>
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            value={amount}
+            onChange={(e) => setAmount(Math.max(1, Math.min(1000, Math.floor(Number(e.target.value) || 1))))}
+            className="text-right font-bold"
+          />
+        </label>
+        <label className="field h-11">
+          <Icon name="edit" size={18} className="text-faint" />
+          <input placeholder="Add a note (optional)" maxLength={80} value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <button className="btn btn-primary w-full" disabled={busy || amount > coins} onClick={send}>
+          <Icon name="gift" size={19} /> {amount > coins ? 'Not enough coins' : `Send ${amount} ${amount === 1 ? 'coin' : 'coins'}`}
+        </button>
+        {amount > coins && (
+          <button className="btn btn-soft w-full" onClick={() => useCoins.getState().openStore()}>
+            Get more coins
+          </button>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
 // ------------------------------------------------------------------ someone else
 
 export function UserProfilePage() {
@@ -517,6 +579,7 @@ export function UserProfilePage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [gift, setGift] = useState(false);
   // Live updates when they change their photo or bio.
   const live = useChat((s) => (user ? (s.friends.find((f) => f.id === user.id) ?? s.conversations.flatMap((c) => c.members).find((m) => m.id === user.id)) : undefined));
   useStopOnLeave();
@@ -610,8 +673,10 @@ export function UserProfilePage() {
           })}
         />
         <ActionButton icon="camera" label="Photobooth" disabled={busy} onClick={act(async () => nav(`/booth/${(await startBoothWith(u.id)).code}`))} />
+        {(u.isFriend || u.addedMe) && <ActionButton icon="gift" label="Gift coins" disabled={busy} onClick={() => setGift(true)} />}
       </div>
       )}
+      <GiftSheet open={gift} onClose={() => setGift(false)} to={u} />
       <Sheet open={menu} onClose={() => setMenu(false)} title={`@${u.username}`}>
         {u.blockedByMe ? (
           <button

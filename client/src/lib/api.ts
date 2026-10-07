@@ -40,6 +40,8 @@ export async function api<T = any>(path: string, opts: Opts = {}): Promise<T> {
     return undefined as T;
   }
   const data = await res.json();
+  // Not enough coins: the coin store opens so they can top up.
+  if (res.status === 402) window.dispatchEvent(new CustomEvent('nivo:need-coins'));
   if (!res.ok) throw new ApiError(res.status, data?.error ?? 'Something went wrong');
   return data as T;
 }

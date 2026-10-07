@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Avatar } from '../components/Avatar';
+import { CoinButton } from '../components/CoinStore';
 import { Icon } from '../components/Icon';
 import { Sheet } from '../components/Sheet';
 import { toast } from '../components/Toast';
@@ -57,13 +58,14 @@ export function FriendsPage() {
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col">
       <header className="safe-top px-5 pt-4">
-        <div className="flex items-end justify-between">
-          <div>
-            <h1 className="text-[28px] font-bold">Friends</h1>
-            <p className="text-sm text-muted">
-              {friends.length} friends · <span className="font-semibold text-[var(--success)]">{online} online</span>
-            </p>
-          </div>
+        <div className="flex items-center justify-between">
+          <h1 className="text-[28px] font-bold">Friends</h1>
+          <CoinButton />
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-muted">
+            {friends.length} friends · <span className="font-semibold text-[var(--success)]">{online} online</span>
+          </p>
           <div className="flex gap-2">
             <Link to="/scan" className="btn btn-primary btn-sm">
               <Icon name="camera" size={18} /> Scan

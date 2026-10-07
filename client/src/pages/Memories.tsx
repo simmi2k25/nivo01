@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { CoinButton } from '../components/CoinStore';
 import { Icon } from '../components/Icon';
 import { SendToChat } from '../components/SendToChat';
 import { Sheet } from '../components/Sheet';
@@ -8,10 +9,14 @@ import { api, errorText } from '../lib/api';
 import { downloadImage, shareImage } from '../lib/share';
 import { stickerUrl } from '../lib/stickers';
 import type { Photo } from '../lib/types';
+import { useCoins } from '../stores/coins';
 
 export default function Memories() {
   const [photos, setPhotos] = useState<Photo[] | null>(null);
   const [limit, setLimit] = useState(5);
+  const slots = useCoins((s) => s.memorySlots);
+  // Buying more space in the coin store updates the limit straight away.
+  useEffect(() => setLimit((l) => Math.max(l, slots)), [slots]);
   const [open, setOpen] = useState<Photo | null>(null);
   const [sendId, setSendId] = useState<number | null>(null);
 
@@ -44,11 +49,19 @@ export default function Memories() {
   return (
     <div className="mx-auto flex h-full max-w-4xl flex-col">
       <header className="safe-top px-5 pt-4">
-        <h1 className="text-[28px] font-bold">Memories</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-[28px] font-bold">Memories</h1>
+          <CoinButton />
+        </div>
         <p className="text-sm text-muted">Your photo strips — only you can see this gallery.</p>
         {photos && (
           <p className={`mt-1 text-xs font-bold ${photos.length >= limit ? 'text-danger' : 'text-primary-strong'}`}>
-            {photos.length} of {limit} saved{photos.length >= limit ? ' · delete one to save a new strip' : ''}
+            {photos.length} of {limit} saved{photos.length >= limit ? ' · delete one, or ' : ''}
+            {photos.length >= limit && (
+              <button className="underline underline-offset-2" onClick={() => useCoins.getState().openStore()}>
+                get more space
+              </button>
+            )}
           </p>
         )}
       </header>

@@ -69,8 +69,14 @@ check((await b.call('GET', '/conversations')).data.conversations[0].unread === 0
 const msgs = (await b.call('GET', `/conversations/${conv.id}/messages`)).data;
 check(msgs.messages.length === 2, 'message history');
 
+const coinsBefore = (await a.call('GET', '/coins')).data.coins;
 const group = (await a.call('POST', '/conversations/group', { title: 'Booth crew', memberIds: [meB.id] })).data.conversation;
-check(group.isGroup && group.members.length === 2, 'group created');
+check(group.isGroup && group.members.length === 1, 'group created (invitee not in yet)');
+check((await a.call('GET', '/coins')).data.coins === coinsBefore - 5, 'creating a group costs 5 coins');
+const invites = (await b.call('GET', '/conversations/invites')).data.invites;
+check(invites.some((i) => i.conversationId === group.id), 'invitation received');
+const joined = (await b.call('POST', `/conversations/${group.id}/join`)).data;
+check(joined.conversation.members.length === 2 && joined.coins === coinsBefore - 1, 'joining costs 1 coin');
 check((await b.call('PATCH', `/conversations/${group.id}`, { title: 'Crew 2' })).data.conversation.title === 'Crew 2', 'rename group');
 
 // booth
