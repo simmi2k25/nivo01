@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import { pool, query } from './db.js';
+import { pushNewMessage } from './push.js';
 import { emitToUsers, isOnline } from './realtime/hub.js';
 
 export const BUDDIES = ['berri', 'chatty', 'dino', 'pepo', 'pomi'] as const;
@@ -128,6 +129,7 @@ export async function postMessage(opts: {
   }
   const out = serializeMessage(msg, clientId);
   emitToUsers(await memberIds(conversationId), 'message:new', out);
+  pushNewMessage(msg).catch((e) => console.error('[push] message', e.message));
   return out;
 }
 

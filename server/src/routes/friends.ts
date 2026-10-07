@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { one, query } from '../db.js';
 import { fail, idParam, parse } from '../http.js';
 import { getUser, publicUser, USER_COLS, type UserRow } from '../model.js';
+import { pushToUsers } from '../push.js';
 import { emitToUsers } from '../realtime/hub.js';
 import { USERNAME } from './auth.js';
 
@@ -56,7 +57,18 @@ router.post('/', async (req, res) => {
   // Let the other person know someone added them (shows under "Added you").
   emitToUsers([target.id], 'friends:changed', { by: req.userId });
   // Only a fresh add pops a notification — re-adding someone already added stays quiet.
-  if (added.rowCount) emitToUsers([target.id], 'friends:added', { user: await getUser(req.userId), mutual: row!.mutual });
+  if (added.rowCount) {
+    const me = await getUser(req.userId);
+    emitToUsers([target.id], 'friends:added', { user: me, mutual: row!.mutual });
+    if (me) {
+      pushToUsers([target.id], {
+        title: me.displayName,
+        body: row!.mutual ? 'added you back — you’re friends now 💕' : 'added you as a friend',
+        to: `/u/${me.username}`,
+        tag: `friend:${me.id}`,
+      }).catch((e) => console.error('[push] friend', e.message));
+    }
+  }
   res.status(201).json({ friend: serialize(row!) });
 });
 

@@ -59,6 +59,8 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   async logout() {
+    const { stopPush } = await import('../lib/push');
+    await stopPush();
     await api('/auth/logout', { method: 'POST' }).catch(() => {});
     disconnectSocket();
     set({ user: null });

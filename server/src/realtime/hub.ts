@@ -40,3 +40,16 @@ export function removeSocket(id: number) {
   sockets.set(id, n);
   return false;
 }
+
+/** Sockets whose app is on screen right now — push notifications go only to people with none. */
+const foreground = new Map<number, Set<string>>();
+
+export function setForeground(userId: number, socketId: string, on: boolean) {
+  const set = foreground.get(userId) ?? new Set<string>();
+  if (on) set.add(socketId);
+  else set.delete(socketId);
+  if (set.size) foreground.set(userId, set);
+  else foreground.delete(userId);
+}
+
+export const isForeground = (id: number) => (foreground.get(id)?.size ?? 0) > 0;

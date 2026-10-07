@@ -73,6 +73,20 @@ The debug APK lands in `client/android/app/build/outputs/apk/debug/`. Building n
 Studio's bundled `jbr` works via `JAVA_HOME`) and the Android SDK. A signed release build is needed for
 the Play Store.
 
+## Phone notifications (Firebase)
+
+New messages and friend adds always pop up inside the app with the NivoTalk chime. To also get phone
+notifications while the Android app is closed or in the background:
+
+1. In the [Firebase console](https://console.firebase.google.com) create a project, add an **Android app**
+   with package name `com.nivotalk.app`, and download `google-services.json` into `client/android/app/`.
+2. In **Project settings → Service accounts**, generate a new private key. Paste the whole JSON file (or
+   its base64) into `FIREBASE_SERVICE_ACCOUNT` on Render.
+3. Rebuild and reinstall the APK (`npm run android:apk -w client`). Don't build a new APK without
+   `google-services.json` — the push plugin crashes when Firebase isn't set up.
+
+The server only pushes to people who don't have NivoTalk on screen, and skips muted chats.
+
 ## Assets
 
 ```bash

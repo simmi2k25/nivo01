@@ -39,6 +39,7 @@ export function App() {
     if (!user) return;
     useChat.getState().loadConversations().catch(() => {});
     useChat.getState().loadFriends().catch(() => {});
+    import('./lib/push').then(({ startPush }) => startPush()).catch(() => {});
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === 'loading') {

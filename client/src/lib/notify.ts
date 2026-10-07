@@ -98,7 +98,7 @@ let navigateFn: ((to: string) => void) | null = null;
 export function setNotifyNavigator(fn: ((to: string) => void) | null) {
   navigateFn = fn;
 }
-function openTarget(to: string) {
+export function openTarget(to: string) {
   if (navigateFn) navigateFn(to);
   else window.location.assign(to);
 }
@@ -112,12 +112,16 @@ if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
 
 // ---------- entry point ----------
 
-/** Chimes and shows a pop-up in the app, or a system notification while the app is in the background. */
+/**
+ * Chimes and shows a pop-up in the app, or a system notification while a browser tab is in the background.
+ * In the Android app, a backgrounded app stays quiet here — the server sends a phone push instead.
+ */
 export function notify(p: Omit<Popup, 'id'>) {
-  playNotifySound();
   if (document.visibilityState === 'visible') {
+    playNotifySound();
     if (notifyPrefs.popups()) showPopup(p);
   } else if (systemNotifyAllowed()) {
+    playNotifySound();
     void showSystem(p);
   }
 }

@@ -14,6 +14,7 @@ import authRoutes from './routes/auth.js';
 import conversationRoutes from './routes/conversations.js';
 import friendRoutes from './routes/friends.js';
 import photoRoutes from './routes/photos.js';
+import pushRoutes from './routes/push.js';
 import roomRoutes from './routes/rooms.js';
 import userRoutes from './routes/users.js';
 
@@ -83,6 +84,7 @@ api.use('/friends', requireAuth, friendRoutes);
 api.use('/conversations', requireAuth, conversationRoutes);
 api.use('/rooms', requireAuth, roomRoutes);
 api.use('/photos', requireAuth, photoRoutes);
+api.use('/push', requireAuth, pushRoutes);
 api.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 app.use('/api', api);
 
