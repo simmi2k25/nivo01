@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { query } from '../db.js';
 import { audienceOf, isMember, memberIds } from '../model.js';
 import { attachBooth } from './booth.js';
+import { attachChill } from './chill.js';
 import { addSocket, emitToUsers, removeSocket, setForeground, setIo, userRoom } from './hub.js';
 
 export function createRealtime(server: http.Server, allowedOrigins: string[]) {
@@ -29,6 +30,7 @@ export function createRealtime(server: http.Server, allowedOrigins: string[]) {
     const userId: number = socket.data.userId;
     socket.join(userRoom(userId));
     attachBooth(socket);
+    attachChill(socket);
     // The app says when it goes to the background, so phone pushes reach people who aren't looking.
     setForeground(userId, socket.id, true);
     socket.on('app:state', (payload: { active?: boolean }) => setForeground(userId, socket.id, payload?.active !== false));

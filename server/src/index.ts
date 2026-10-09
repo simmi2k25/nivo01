@@ -13,6 +13,7 @@ import { errorHandler } from './http.js';
 import { createRealtime } from './realtime/socket.js';
 import authRoutes from './routes/auth.js';
 import blockRoutes from './routes/blocks.js';
+import chillRoutes from './routes/chill.js';
 import coinRoutes from './routes/coins.js';
 import conversationRoutes from './routes/conversations.js';
 import friendRoutes from './routes/friends.js';
@@ -39,10 +40,12 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        // The YouTube IFrame player plays Chill Room songs in full.
+        scriptSrc: ["'self'", 'https://www.youtube.com', 'https://s.ytimg.com'],
+        frameSrc: ['https://www.youtube.com', 'https://www.youtube-nocookie.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.mzstatic.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.mzstatic.com', 'https://i.ytimg.com'],
         mediaSrc: ["'self'", 'blob:', 'https://*.apple.com', 'https://*.mzstatic.com'],
         connectSrc: ["'self'", 'https://itunes.apple.com', 'wss:', 'ws:'],
         workerSrc: ["'self'"],
@@ -53,10 +56,12 @@ app.use(
       },
     },
     crossOriginEmbedderPolicy: false,
+    // YouTube refuses to play embeds that arrive without a Referer (helmet's default is no-referrer).
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   }),
 );
 app.use((_req, res, next) => {
-  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(), autoplay=(self "https://www.youtube.com")');
   next();
 });
 app.use(compression());
@@ -89,6 +94,7 @@ api.use('/blocks', requireAuth, blockRoutes);
 api.use('/coins', requireAuth, coinRoutes);
 api.use('/conversations', requireAuth, conversationRoutes);
 api.use('/rooms', requireAuth, roomRoutes);
+api.use('/chill', requireAuth, chillRoutes);
 api.use('/photos', requireAuth, photoRoutes);
 api.use('/push', requireAuth, pushRoutes);
 api.use('/sync', requireAuth, syncRoutes);

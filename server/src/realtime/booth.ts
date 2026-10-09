@@ -3,6 +3,7 @@ import type { Socket } from 'socket.io';
 import { query } from '../db.js';
 import { getUser, STICKER_ID, type PublicUser } from '../model.js';
 import { findOpenRoom, ROOM_CODE } from '../routes/rooms.js';
+import { notifyTogether } from './chill.js';
 import { getIo } from './hub.js';
 
 const MAX_PEOPLE = 4;
@@ -15,6 +16,7 @@ type Shoot = { id: string; shots: number; countdown: number; participantIds: num
 type Session = {
   code: string;
   hostId: number;
+  conversationId: number | null;
   shots: number;
   countdown: number;
   participants: Map<number, Participant>;
@@ -25,6 +27,13 @@ type Session = {
 
 const sessions = new Map<string, Session>();
 const roomOf = (code: string) => `booth:${code}`;
+
+/** Booths with someone inside, for the Together tab's "Live now". */
+export function liveBooths() {
+  return [...sessions.values()]
+    .filter((s) => s.participants.size > 0)
+    .map((s) => ({ code: s.code, hostId: s.hostId, conversationId: s.conversationId, participants: liveParticipants(s.code) }));
+}
 
 export function liveParticipants(code: string) {
   const s = sessions.get(code);
@@ -80,6 +89,7 @@ function removeParticipant(code: string, userId: number, socketId: string) {
   s.participants.delete(userId);
   getIo().sockets.sockets.get(socketId)?.leave(roomOf(code));
   getIo().to(roomOf(code)).emit('booth:peer-left', { userId });
+  notifyTogether(s.hostId, s.conversationId);
   if (!s.participants.size) {
     stopShoot(s);
     sessions.delete(code);
@@ -155,6 +165,7 @@ export function attachBooth(socket: Socket) {
         s = {
           code,
           hostId: room.host_id,
+          conversationId: room.conversation_id,
           shots: room.shots,
           countdown: room.countdown,
           participants: new Map(),
@@ -182,6 +193,7 @@ export function attachBooth(socket: Socket) {
       await socket.join(roomOf(code));
       socket.to(roomOf(code)).emit('booth:peer-joined', { userId, user });
       broadcastState(s);
+      notifyTogether(s.hostId, s.conversationId);
       ack({ ok: true, state: stateOf(s) });
     } catch (e) {
       console.error('[booth] join failed', e);

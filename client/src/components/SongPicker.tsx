@@ -6,7 +6,15 @@ import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 import { Bars } from './SongCard';
 
-type Track = { trackId: number; trackName: string; artistName: string; artworkUrl100?: string; previewUrl?: string; trackViewUrl?: string };
+export type Track = {
+  trackId: number;
+  trackName: string;
+  artistName: string;
+  artworkUrl100?: string;
+  previewUrl?: string;
+  trackViewUrl?: string;
+  trackTimeMillis?: number;
+};
 
 /** Country from the phone's language setting (e.g. en-IN → IN) so local music shows up. */
 export function deviceCountry() {
@@ -15,7 +23,7 @@ export function deviceCountry() {
   return region && /^[a-zA-Z]{2}$/.test(region) ? region.toUpperCase() : 'US';
 }
 
-async function searchSongs(term: string, signal: AbortSignal): Promise<Track[]> {
+export async function searchSongs(term: string, signal: AbortSignal): Promise<Track[]> {
   const params = new URLSearchParams({ term, media: 'music', entity: 'song', limit: '25', country: deviceCountry() });
   try {
     // Straight from the browser to Apple: spreads rate limits across users instead of the server.

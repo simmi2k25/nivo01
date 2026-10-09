@@ -17,6 +17,8 @@ import { REACTIONS, type Conversation, type Message, type ReplyPreview, type Roo
 import { useAuth } from '../stores/auth';
 import { typingIn, useChat } from '../stores/chat';
 import { useCoins } from '../stores/coins';
+import { liveRoomFor, useTogether } from '../stores/together';
+import { LiveBars } from './together/parts';
 import { FriendPicker, GroupAvatar } from './Chats';
 
 /** What the composer is doing besides a new message: replying to one, or editing one of yours. */
@@ -70,6 +72,7 @@ export function ChatRoom({ conversationId }: { conversationId: number }) {
   return (
     <div className="flex h-full flex-col bg-bg">
       <RoomHeader conv={conv} me={me} />
+      <LiveStrip conversationId={conv.id} />
       <MessageList
         conv={conv}
         me={me}
@@ -113,6 +116,19 @@ function RoomHeader({ conv, me }: { conv: Conversation; me: User }) {
     }
   }
 
+  async function startChill() {
+    // One room per chat: if one is already going, this just takes you into it.
+    setBusy(true);
+    try {
+      const { room } = await api<{ room: { code: string } }>('/chill', { body: { conversationId: conv.id } });
+      nav(`/chill/${room.code}`);
+    } catch (e) {
+      toast(errorText(e), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <header className="safe-top z-10 shrink-0 border-b border-line bg-surface/90 backdrop-blur">
       <div className="flex h-16 items-center gap-2 px-2">
@@ -126,6 +142,9 @@ function RoomHeader({ conv, me }: { conv: Conversation; me: User }) {
             <span className={`block truncate text-xs ${typers.length || other?.online ? 'font-semibold text-primary-strong' : 'text-muted'}`}>{status}</span>
           </span>
         </Link>
+        <button className="icon-btn" onClick={startChill} disabled={busy} aria-label="Listen to music together" title="Open a Chill Room">
+          <Icon name="music" />
+        </button>
         <button className="icon-btn" onClick={startBooth} disabled={busy} aria-label="Start a photobooth together" title="Start a photobooth">
           <Icon name="camera" />
         </button>
@@ -135,6 +154,30 @@ function RoomHeader({ conv, me }: { conv: Conversation; me: User }) {
       </div>
       <ChatMenu conv={conv} me={me} open={menu} onClose={() => setMenu(false)} />
     </header>
+  );
+}
+
+/** "Chill Room is live" banner while a room started from this chat has people in it. */
+function LiveStrip({ conversationId }: { conversationId: number }) {
+  const room = useTogether((s) => liveRoomFor(s.rooms, conversationId));
+  if (!room) return null;
+  const n = room.listeners.length;
+  return (
+    <div className="z-[5] shrink-0 px-3 pt-3">
+      <Link
+        to={`/chill/${room.code}`}
+        className="anim-rise flex items-center gap-3.5 rounded-[26px] bg-gradient-to-r from-[#4357c4] to-[#5b6fd8] py-3 pr-3 pl-5 text-white shadow-[0_10px_26px_rgba(67,87,196,0.35)]"
+      >
+        <LiveBars />
+        <span className="min-w-0 flex-1">
+          <span className="block font-display text-[17px] leading-tight font-semibold">Chill Room is live</span>
+          <span className="block truncate text-[13.5px] opacity-90">
+            {n} listening{room.nowPlaying ? ` · ${room.nowPlaying.title}` : ''}
+          </span>
+        </span>
+        <span className="grid h-11 shrink-0 place-items-center rounded-full bg-white px-6 font-display font-semibold text-[#4357c4]">Join</span>
+      </Link>
+    </div>
   );
 }
 
@@ -493,7 +536,14 @@ function MessageRow({
   if (m.kind === 'system') {
     return (
       <div className="my-2 flex justify-center">
-        <span className="rounded-full bg-surface px-3 py-1 text-xs font-semibold text-muted shadow-sm">{m.body}</span>
+        <span className="flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-xs font-semibold text-muted shadow-sm">
+          {m.body}
+          {m.meta?.event === 'chill' && typeof m.meta.code === 'string' && (
+            <Link to={`/chill/${m.meta.code}`} className="-mr-1.5 rounded-full bg-primary-soft px-2.5 py-0.5 font-bold text-primary-strong">
+              Join
+            </Link>
+          )}
+        </span>
       </div>
     );
   }

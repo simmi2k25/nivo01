@@ -93,3 +93,43 @@ export type Room = {
 };
 
 export type Photo = { id: number; url: string; roomCode: string | null; size: number; createdAt: string };
+
+// ---------- Together: Chill Rooms ----------
+
+export type ChillItem = {
+  id: string;
+  title: string;
+  artist: string;
+  artwork: string | null;
+  videoId: string;
+  durationMs: number | null;
+  addedBy: number;
+  by: Pick<User, 'id' | 'displayName' | 'avatar' | 'avatarUrl'> | null;
+};
+
+export type ChillState = {
+  code: string;
+  hostId: number;
+  conversationId: number | null;
+  queue: ChillItem[];
+  index: number;
+  playing: boolean;
+  /** Where the song was at server time anchorAt. */
+  positionMs: number;
+  anchorAt: number;
+  finished: boolean;
+  listeners: User[];
+};
+
+export type ChillLine = {
+  id: string;
+  kind: 'text' | 'event';
+  user: Pick<User, 'id' | 'displayName' | 'avatar' | 'avatarUrl'> | null;
+  text: string;
+  at: number;
+};
+
+export type NowPlaying = { title: string; artist: string; artwork: string | null; playing: boolean };
+
+export type LiveChill = { code: string; hostId: number; host: User | null; conversationId: number | null; listeners: User[]; nowPlaying: NowPlaying | null };
+export type LiveBooth = { code: string; hostId: number; host: User | null; conversationId: number | null; people: User[] };

@@ -54,12 +54,19 @@ const PATHS = {
   door: 'M14 4H6a1 1 0 0 0-1 1v15h9M14 4l5 1.5v14L14 20V4ZM11 12h.01',
   palette: 'M12 21a9 9 0 1 1 9-9c0 2.5-2 3.5-4 3.5h-1.5a1.5 1.5 0 0 0-1.1 2.5c.6.7.2 3-2.4 3ZM7.5 11.5h.01M10.5 7.5h.01M15 7.5h.01M17.5 11h.01',
   group: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 19v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1M16 5.2a3 3 0 0 1 0 5.6M21 19v-1a4 4 0 0 0-3-3.9',
+  skipBack: 'M6 5h2.5v14H6zM19 5.8v12.4a.8.8 0 0 1-1.2.7L9.6 12.7a.8.8 0 0 1 0-1.4l8.2-6.2a.8.8 0 0 1 1.2.7Z',
+  skipForward: 'M15.5 5H18v14h-2.5zM5 5.8v12.4a.8.8 0 0 0 1.2.7l8.2-6.2a.8.8 0 0 0 0-1.4L6.2 5.1A.8.8 0 0 0 5 5.8Z',
+  shuffle: 'M16 4h4v4M4 20 20 4M20 16v4h-4M15 15l5 5M4 4l5 5',
+  volume: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1ZM15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11',
+  volumeOff: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1ZM16 10l4 4M20 10l-4 4',
+  together: 'M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5l-1.7-4.8L4.5 10l4.8-1.7L11 3.5ZM18.5 15v5M16 17.5h5',
+  live: 'M5 10v6M9.5 6v14M14 8v10M18.5 11v5',
 } as const;
 
 export type IconName = keyof typeof PATHS;
 
 export function Icon({ name, size = 22, strokeWidth = 1.9, ...rest }: { name: IconName; size?: number; strokeWidth?: number } & SVGProps<SVGSVGElement>) {
-  const filled = name === 'play' || name === 'pause';
+  const filled = name === 'play' || name === 'pause' || name === 'skipBack' || name === 'skipForward';
   return (
     <svg
       width={size}

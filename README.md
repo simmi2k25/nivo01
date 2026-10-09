@@ -13,10 +13,12 @@ everyone can decorate, keep and share.
 ```
 server/            Express 5 + Socket.IO API (TypeScript)
   migrations/      numbered SQL files, applied automatically at boot
-  src/routes/      auth, users, friends, conversations, rooms, photos
-  src/realtime/    presence, typing, and the photobooth engine (signaling, countdown, frame relay)
+  src/routes/      auth, users, friends, conversations, rooms, chill, photos
+  src/realtime/    presence, typing, the photobooth engine and the Chill Room sync engine
+  src/songs.ts     finds the full YouTube version of an Apple Music track (or reads a pasted link)
 client/            React 19 + Vite + Tailwind v4 single-page app
   src/pages/booth/ live booth room, WebRTC mesh, strip compositor + editor (loaded on demand)
+  src/pages/together/ Together tab, Chill Room (cover carousel, synced YouTube player, room chat, songs & queue)
   public/stickers/ 187 WebP stickers sliced from the sheets in assets/stickers
   android/         Capacitor Android project
 tools/             sticker slicer, icon generator, local test DB, end-to-end smoke test
@@ -86,6 +88,26 @@ notifications while the Android app is closed or in the background:
    `google-services.json` — the push plugin crashes when Firebase isn't set up.
 
 The server only pushes to people who don't have NivoTalk on screen, and skips muted chats.
+
+## Together: Chill Room (listen in sync)
+
+The **Together** tab (centre of the tab bar) holds the Photobooth and the **Chill Room**: friends play full-length
+songs in sync, see each song's cover, and chat while they listen. You can open a room from Together or with the 🎵
+button in any chat. That chat gets a "Chill Room is live · Join" strip while people are listening.
+
+- Search uses Apple Music for titles and covers. Each song plays in full through YouTube's official embedded player.
+- The server keeps the queue and the play position. Every phone follows it and gets nudged back if it drifts more
+  than about a second. Anyone in the room can play, pause, seek, skip, shuffle or add songs.
+- Rooms and their chat are saved in Postgres, so a redeploy doesn't lose the queue.
+
+To turn on song search, set `YOUTUBE_API_KEY` on Render:
+
+1. In the [Google Cloud console](https://console.cloud.google.com), create a project and enable **YouTube Data API v3**.
+2. Go to **APIs & Services → Credentials → Create credentials → API key**. Restrict the key to the YouTube Data API v3.
+3. Paste the key into `YOUTUBE_API_KEY` on Render.
+
+The free quota covers about 100 *new* songs a day. Each song is looked up once and then remembered (`song_videos`
+table). Without a key, people can still paste a YouTube link into the Songs search.
 
 ## Assets
 

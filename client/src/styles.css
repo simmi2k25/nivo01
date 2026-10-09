@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* `dark:` follows the app's own theme switch, not the OS setting. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 /* ---------- design tokens ---------- */
 :root {
   --bg: #f2f5fe;
@@ -92,6 +95,10 @@ button:disabled {
 :focus-visible {
   outline: 2.5px solid var(--primary);
   outline-offset: 2px;
+}
+/* Rounded fields draw their own focus ring around the whole pill. */
+.field input:focus-visible {
+  outline: none;
 }
 ::selection {
   background: var(--primary-soft);
@@ -415,4 +422,91 @@ textarea {
 }
 :root[data-theme='dark'] {
   --wallpaper-veil: rgba(21, 26, 51, 0.55);
+}
+
+/* ---------- Together: Chill Room ---------- */
+.chill-bg {
+  background: radial-gradient(120% 60% at 50% 0%, #dfe4fd 0%, transparent 70%), var(--bg);
+}
+:root[data-theme='dark'] .chill-bg {
+  background: radial-gradient(120% 60% at 50% 0%, #252d5c 0%, transparent 70%), var(--bg);
+}
+/* The cover carousel: the current song in the middle, played ones to the left, up next to the right. */
+.chill-stage {
+  --H: clamp(210px, 35dvh, 310px);
+  height: var(--H);
+  flex-shrink: 0;
+}
+@media (min-width: 1024px) {
+  .chill-stage {
+    --H: clamp(280px, 48dvh, 470px);
+    margin-top: 12px;
+  }
+}
+.chill-card {
+  --h: calc(var(--H) * 0.88);
+  --w: calc(var(--h) * 0.84);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--w);
+  height: var(--h);
+  padding: 7px;
+  border-radius: 27px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(90, 111, 208, 0.22);
+  transform: translate(-50%, -50%) translateX(calc(var(--o) * var(--w) * 1.02)) scale(calc(1 - var(--a) * 0.14))
+    rotate(calc(var(--o) * 2deg));
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s;
+}
+.chill-card:not(.chill-front) {
+  opacity: calc(1 - var(--a) * 0.12);
+}
+:root[data-theme='dark'] .chill-card {
+  background: var(--surface-2);
+}
+
+.chill-range {
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+.chill-range:disabled {
+  cursor: default;
+}
+.chill-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-strong) var(--p, 0%), var(--primary-soft) var(--p, 0%));
+}
+.chill-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--primary-strong);
+  border: 3px solid #fff;
+  box-shadow: 0 2px 8px rgba(90, 111, 208, 0.45);
+}
+.chill-range::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+}
+.chill-range::-moz-range-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary-strong);
+}
+.chill-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary-strong);
+  border: 3px solid #fff;
+}
+.chill-range:disabled::-webkit-slider-thumb {
+  visibility: hidden;
 }

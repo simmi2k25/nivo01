@@ -30,6 +30,8 @@ export const config = {
   jwtSecret: required('JWT_SECRET', 'dev-only-secret-do-not-use-in-production'),
   clientOrigin: process.env.CLIENT_ORIGIN || undefined,
   firebase: firebaseAccount(),
+  /** YouTube Data API key: finds the full-length video for each song added to a Chill Room. */
+  youtubeApiKey: process.env.YOUTUBE_API_KEY?.trim() || undefined,
   turn: {
     url: process.env.TURN_URL || undefined,
     username: process.env.TURN_USERNAME || undefined,

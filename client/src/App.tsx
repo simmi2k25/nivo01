@@ -11,10 +11,13 @@ import { LoginPage } from './pages/Login';
 import { MyProfilePage, UserProfilePage } from './pages/Profile';
 import { useAuth } from './stores/auth';
 import { useChat } from './stores/chat';
+import { startTogether } from './stores/together';
 
 // Heavy photobooth code (camera, WebRTC, strip editor) loads only when opened.
 const BoothHome = lazy(() => import('./pages/booth/BoothHome'));
 const BoothRoom = lazy(() => import('./pages/booth/BoothRoom'));
+const TogetherHome = lazy(() => import('./pages/together/TogetherHome'));
+const ChillRoom = lazy(() => import('./pages/together/ChillRoom'));
 const Memories = lazy(() => import('./pages/Memories'));
 const Scan = lazy(() => import('./pages/Scan'));
 
@@ -40,6 +43,7 @@ export function App() {
     useChat.getState().loadConversations().catch(() => {});
     useChat.getState().loadFriends().catch(() => {});
     import('./lib/push').then(({ startPush }) => startPush()).catch(() => {});
+    return startTogether();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === 'loading') {
@@ -59,6 +63,8 @@ export function App() {
               <Route path="/chats" element={<ChatsPage />} />
               <Route path="/chats/:id" element={<ChatsPage />} />
               <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/together" element={<TogetherHome />} />
+              <Route path="/chill/:code" element={<ChillRoom />} />
               <Route path="/booth" element={<BoothHome />} />
               <Route path="/booth/:code" element={<BoothRoom />} />
               <Route path="/memories" element={<Memories />} />
