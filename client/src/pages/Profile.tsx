@@ -4,6 +4,7 @@ import { Avatar, BuddyAvatar } from '../components/Avatar';
 import { Icon, type IconName } from '../components/Icon';
 import { CoinButton } from '../components/CoinStore';
 import { Loader } from '../components/Loader';
+import { OfficialBadge } from '../components/News';
 import { PhotoCropper } from '../components/PhotoCropper';
 import { ProfileStage } from '../components/ProfileStage';
 import { QrSheet } from '../components/QrSheet';
@@ -23,6 +24,7 @@ import type { Buddy, ProfileUser, Song, User } from '../lib/types';
 import { useAuth } from '../stores/auth';
 import { useCoins } from '../stores/coins';
 import { useChat } from '../stores/chat';
+import { useNews } from '../stores/news';
 
 function ActionButton({ icon, label, onClick, disabled }: { icon: IconName; label: string; onClick: () => void; disabled?: boolean }) {
   return (
@@ -41,7 +43,10 @@ function Identity({ user, editing }: { user: User; editing?: boolean }) {
       </span>
       {!editing && (
         <>
-          <h1 className="anim-rise delay-3 mt-3 text-2xl font-semibold drop-shadow">{user.displayName}</h1>
+          <h1 className="anim-rise delay-3 mt-3 flex items-center gap-1.5 text-2xl font-semibold drop-shadow">
+            {user.displayName}
+            {user.isAdmin && <OfficialBadge size={22} />}
+          </h1>
           <p className="anim-rise delay-3 text-sm font-semibold opacity-80">@{user.username}</p>
           {user.bio && <p className="anim-rise delay-4 mt-1.5 max-w-[300px] text-[14px] whitespace-pre-line opacity-95 drop-shadow">{user.bio}</p>}
         </>
@@ -107,7 +112,8 @@ export function MyProfilePage() {
           </button>
         </div>
       </div>
-      {friendCount !== null && <FriendHeart count={friendCount} to="/friends" />}
+      {/* The official account doesn't show a friend-count heart. */}
+      {friendCount !== null && !me.isAdmin && <FriendHeart count={friendCount} to="/friends" />}
       <div className="flex-1" />
       <div className="px-6 pb-4">
         <Identity user={me} />
@@ -116,6 +122,7 @@ export function MyProfilePage() {
         <ActionButton icon="images" label="Memories" onClick={() => nav('/memories')} />
         <ActionButton icon="edit" label="Edit profile" onClick={() => setEditing(true)} />
         <ActionButton icon="qr" label="QR ID" onClick={() => setParams({ qr: '1' })} />
+        {me.isAdmin && <ActionButton icon="bell" label="Announce" onClick={() => useNews.getState().show()} />}
       </div>
       <QrSheet open={qrOpen} onClose={() => setParams({})} user={me} />
       <SettingsSheet open={settings} onClose={() => setSettings(false)} />
@@ -633,7 +640,7 @@ export function UserProfilePage() {
           <Icon name="more" />
         </button>
       </div>
-      {!u.blockedByMe && <FriendHeart count={u.friendCount} />}
+      {!u.blockedByMe && !u.isAdmin && <FriendHeart count={u.friendCount} />}
       {u.song && (
         <div className="px-4">
           <SongCard song={u.song} />

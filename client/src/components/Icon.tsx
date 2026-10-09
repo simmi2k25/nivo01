@@ -61,6 +61,9 @@ const PATHS = {
   volumeOff: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1ZM16 10l4 4M20 10l-4 4',
   together: 'M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5l-1.7-4.8L4.5 10l4.8-1.7L11 3.5ZM18.5 15v5M16 17.5h5',
   live: 'M5 10v6M9.5 6v14M14 8v10M18.5 11v5',
+  undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
+  pen: 'M15.5 4.5l4 4L8 20H4v-4L15.5 4.5ZM13 7l4 4',
+  minus: 'M5 12h14',
 } as const;
 
 export type IconName = keyof typeof PATHS;

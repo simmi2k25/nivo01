@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Avatar } from '../components/Avatar';
 import { CoinButton } from '../components/CoinStore';
@@ -14,6 +14,9 @@ import { useAuth } from '../stores/auth';
 import { typingIn, useChat } from '../stores/chat';
 import { ChatRoom } from './ChatRoom';
 import { useCoins } from '../stores/coins';
+import { NewsBanner } from '../components/News';
+import { prepareImage } from '../lib/image';
+import { unseenNews, useNews } from '../stores/news';
 
 export function ChatsPage() {
   const { id } = useParams();
@@ -64,6 +67,84 @@ export function GroupAvatar({ c, meId, size = 52 }: { c: Conversation; meId: num
   );
 }
 
+/** Pick your own Chats background for coins, or go back to the plain one. */
+function ChatsBgSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const me = useAuth((s) => s.user)!;
+  const cost = useCoins((s) => s.prices.chatsBg);
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function upload(file?: File) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const blob = await prepareImage(file, { max: 1440, quality: 0.82 });
+      const r = await api<{ coins: number; chatsBgUrl: string }>('/users/me/chats-bg', { method: 'PUT', raw: blob });
+      useCoins.getState().setBalance({ coins: r.coins });
+      useAuth.getState().setUser({ ...me, chatsBgUrl: r.chatsBgUrl });
+      toast('New Chats background 🌸');
+      onClose();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = '';
+    }
+  }
+
+  async function reset() {
+    setBusy(true);
+    try {
+      await api('/users/me/chats-bg', { method: 'DELETE' });
+      useAuth.getState().setUser({ ...me, chatsBgUrl: null });
+      onClose();
+    } catch (e) {
+      toast(errorText(e), 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Chats background">
+      <div
+        className="grid h-40 place-items-center overflow-hidden rounded-[22px] border border-line bg-bg text-sm font-bold text-muted"
+        style={me.chatsBgUrl || me.coverUrl ? { background: `url(${me.chatsBgUrl || me.coverUrl}) center / cover` } : undefined}
+      >
+        {!me.chatsBgUrl && !me.coverUrl && 'Plain background'}
+      </div>
+      <p className="mt-3 text-sm text-muted">
+        {me.chatsBgUrl
+          ? 'You’re using your own Chats photo. Only you see it.'
+          : me.coverUrl
+            ? 'Your profile background shows here for free. Want a different photo just for Chats?'
+            : 'Set a profile background to see it here for free, or pick a photo just for Chats.'}
+      </p>
+      <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
+      <button className="btn btn-primary mt-3 w-full" disabled={busy} onClick={() => input.current?.click()}>
+        <Icon name="image" size={19} /> {busy ? 'Saving…' : `Choose a photo · 🪙 ${cost}`}
+      </button>
+      {me.chatsBgUrl && (
+        <button className="btn btn-soft mt-2 w-full" disabled={busy} onClick={reset}>
+          {me.coverUrl ? 'Use my profile background (free)' : 'Back to plain (free)'}
+        </button>
+      )}
+    </Sheet>
+  );
+}
+
+/** Opens NivoTalk news; the dot means there's something you haven't read. */
+function NewsButton() {
+  const show = useNews((s) => s.show);
+  const unseen = useNews((s) => unseenNews(s).length);
+  return (
+    <button className="icon-btn relative" onClick={show} aria-label={unseen ? `NivoTalk news, ${unseen} new` : 'NivoTalk news'}>
+      <Icon name="bell" />
+      {unseen > 0 && <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-danger ring-2 ring-surface" />}
+    </button>
+  );
+}
+
 function useTick(active: boolean) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -80,6 +161,7 @@ function ConversationList({ activeId }: { activeId: number | null }) {
   const chatState = useChat();
   const [q, setQ] = useState('');
   const [newGroup, setNewGroup] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
   const anyTyping = Object.values(chatState.typing).some((t) => Object.keys(t).length > 0);
   const now = useTick(anyTyping);
 
@@ -89,28 +171,39 @@ function ConversationList({ activeId }: { activeId: number | null }) {
     return conversations.filter((c) => convTitle(c, me.id).toLowerCase().includes(s));
   }, [conversations, q, me.id]);
 
+  // Your profile background shows behind your chats (or the one you bought just for Chats), softened so the list stays readable.
+  const bgUrl = me.chatsBgUrl || me.coverUrl;
+  const bgStyle = bgUrl
+    ? {
+        background: `linear-gradient(color-mix(in srgb, var(--bg) 45%, transparent), color-mix(in srgb, var(--bg) 78%, transparent)), url(${bgUrl}) center / cover`,
+      }
+    : undefined;
+
   return (
-    <div className="flex h-full flex-col bg-bg md:bg-surface">
+    <div className="flex h-full flex-col bg-bg md:bg-surface" style={bgStyle}>
       <header className="safe-top px-5 pt-4">
         <div className="flex items-center justify-between">
           <h1 className="text-[28px] font-bold">Chats</h1>
           <div className="flex items-center gap-1">
             <CoinButton />
+            <NewsButton />
             <button className="icon-btn" onClick={() => setNewGroup(true)} aria-label="New group chat">
               <Icon name="group" />
             </button>
-            <Link to="/friends" className="icon-btn" aria-label="Find friends">
-              <Icon name="userPlus" />
-            </Link>
+            <button className="icon-btn" onClick={() => setBgOpen(true)} aria-label="Chats background" title="Change background">
+              <Icon name="palette" />
+            </button>
           </div>
         </div>
-        <label className="field mt-3 h-11">
+        <label className="field mt-3 h-11 bg-surface/90">
           <Icon name="search" size={18} className="text-faint" />
           <input placeholder="Search chats" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
       </header>
+      <ChatsBgSheet open={bgOpen} onClose={() => setBgOpen(false)} />
 
-      <div className="scroll-thin mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-28 md:pb-4">
+      <div className="scroll-thin mt-3 min-h-0 flex-1 overflow-y-auto px-3 pb-28 md:pb-4">
+        <NewsBanner />
         <GroupInvites />
         {!conversationsLoaded && <ListSkeleton />}
         {conversationsLoaded && conversations.length === 0 && (
@@ -130,8 +223,9 @@ function ConversationList({ activeId }: { activeId: number | null }) {
             <Link
               key={c.id}
               to={`/chats/${c.id}`}
-              className={`anim-rise flex items-center gap-3 rounded-2xl px-3 py-2.5 transition ${
-                activeId === c.id ? 'bg-primary-soft' : 'hover:bg-surface-2'
+              // Frosted white cards, so the Chats background shows softly through.
+              className={`anim-rise mb-2 flex items-center gap-3 rounded-[22px] px-3 py-3 shadow-[var(--shadow-sm)] ring-1 ring-white/60 backdrop-blur-md transition ${
+                activeId === c.id ? 'bg-primary-soft/90' : 'bg-surface/60 hover:bg-surface/80'
               }`}
               style={{ animationDelay: `${Math.min(i, 8) * 30}ms` }}
             >

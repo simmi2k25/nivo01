@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { clearSessionCookie, requireAuth, setSessionCookie } from '../auth.js';
 import { one, query } from '../db.js';
 import { fail, parse } from '../http.js';
-import { BUDDIES, getUser } from '../model.js';
+import { BUDDIES, getUser, imageUrl } from '../model.js';
 
 export const USERNAME = z
   .string()
@@ -84,11 +84,19 @@ router.get('/me', requireAuth, async (req, res) => {
     clearSessionCookie(res);
     throw fail(401, 'Please log in');
   }
-  const extra = await one<{ email: string; coins: number; memory_slots: number }>(
-    'SELECT email, coins, memory_slots FROM users WHERE id = $1',
+  const extra = await one<{ email: string; coins: number; memory_slots: number; chats_bg_image_id: number | null }>(
+    'SELECT email, coins, memory_slots, chats_bg_image_id FROM users WHERE id = $1',
     [req.userId],
   );
-  res.json({ user: { ...user, email: extra?.email, coins: extra?.coins ?? 0, memorySlots: extra?.memory_slots ?? 5 } });
+  res.json({
+    user: {
+      ...user,
+      email: extra?.email,
+      coins: extra?.coins ?? 0,
+      memorySlots: extra?.memory_slots ?? 5,
+      chatsBgUrl: imageUrl(extra?.chats_bg_image_id ?? null),
+    },
+  });
 });
 
 router.get('/check-username', async (req, res) => {

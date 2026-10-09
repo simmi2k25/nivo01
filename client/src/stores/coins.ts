@@ -4,7 +4,7 @@ import { useAuth } from './auth';
 
 export type CoinPack = { id: string; coins: number; inr: number; tag?: string };
 export type CoinHistory = { id: number; delta: number; reason: string; ref: Record<string, unknown>; createdAt: string };
-export type Prices = { memorySmall: number; memoryLarge: number; wallpaper: number; groupCreate: number; groupJoin: number; watermark: number };
+export type Prices = { memorySmall: number; memoryLarge: number; wallpaper: number; groupCreate: number; groupJoin: number; watermark: number; chatsBg: number };
 
 type CoinState = {
   coins: number;
@@ -22,7 +22,7 @@ type CoinState = {
 };
 
 /** Default prices so buttons can show costs before the store has loaded. */
-const PRICES: Prices = { memorySmall: 3, memoryLarge: 5, wallpaper: 5, groupCreate: 5, groupJoin: 1, watermark: 2 };
+const PRICES: Prices = { memorySmall: 3, memoryLarge: 5, wallpaper: 5, groupCreate: 5, groupJoin: 1, watermark: 2, chatsBg: 10 };
 
 export const useCoins = create<CoinState>((set, get) => ({
   coins: 0,

@@ -11,6 +11,7 @@ import { migrate, pool } from './db.js';
 import { purgeExpired } from './delivery.js';
 import { errorHandler } from './http.js';
 import { createRealtime } from './realtime/socket.js';
+import announcementRoutes from './routes/announcements.js';
 import authRoutes from './routes/auth.js';
 import blockRoutes from './routes/blocks.js';
 import chillRoutes from './routes/chill.js';
@@ -21,6 +22,7 @@ import photoRoutes from './routes/photos.js';
 import pushRoutes from './routes/push.js';
 import syncRoutes from './routes/sync.js';
 import roomRoutes from './routes/rooms.js';
+import statusRoutes from './routes/statuses.js';
 import userRoutes from './routes/users.js';
 
 const app = express();
@@ -88,6 +90,7 @@ api.get('/rtc-config', requireAuth, (_req, res) => {
   res.json({ iceServers });
 });
 api.use('/auth', authRoutes);
+api.use('/announcements', requireAuth, announcementRoutes);
 api.use('/users', requireAuth, userRoutes);
 api.use('/friends', requireAuth, friendRoutes);
 api.use('/blocks', requireAuth, blockRoutes);
@@ -96,6 +99,7 @@ api.use('/conversations', requireAuth, conversationRoutes);
 api.use('/rooms', requireAuth, roomRoutes);
 api.use('/chill', requireAuth, chillRoutes);
 api.use('/photos', requireAuth, photoRoutes);
+api.use('/statuses', requireAuth, statusRoutes);
 api.use('/push', requireAuth, pushRoutes);
 api.use('/sync', requireAuth, syncRoutes);
 api.use((_req, res) => res.status(404).json({ error: 'Not found' }));
@@ -133,7 +137,11 @@ createRealtime(server, allowedOrigins);
 async function main() {
   await migrate();
   // Delivered messages are removed as devices confirm them; this catches anything past 30 days.
-  const sweep = () => purgeExpired().catch((e) => console.error('[delivery] sweep failed', e.message));
+  const sweep = () => {
+    purgeExpired().catch((e) => console.error('[delivery] sweep failed', e.message));
+    // Statuses vanish from feeds after 24 h; this clears them out of the database too.
+    pool.query('DELETE FROM statuses WHERE expires_at < now()').catch((e) => console.error('[statuses] sweep failed', e.message));
+  };
   sweep();
   setInterval(sweep, 60 * 60 * 1000).unref();
   server.listen(config.port, () => console.log(`[nivotalk] listening on :${config.port}`));

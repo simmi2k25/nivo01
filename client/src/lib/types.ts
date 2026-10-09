@@ -21,10 +21,14 @@ export type User = {
   song: Song | null;
   lastSeenAt: string | null;
   online: boolean;
+  /** The official NivoTalk account (posts announcements). */
+  isAdmin?: boolean;
   /** Only on your own account. */
   email?: string;
   coins?: number;
   memorySlots?: number;
+  /** Your own Chats screen background (bought with coins). */
+  chatsBgUrl?: string | null;
 };
 
 export type Friend = User & { favorite: boolean; mutual: boolean; addedAt: string };
@@ -133,3 +137,22 @@ export type NowPlaying = { title: string; artist: string; artwork: string | null
 
 export type LiveChill = { code: string; hostId: number; host: User | null; conversationId: number | null; listeners: User[]; nowPlaying: NowPlaying | null };
 export type LiveBooth = { code: string; hostId: number; host: User | null; conversationId: number | null; people: User[] };
+
+export type Announcement = { id: number; title: string; body: string; createdAt: string; author: User | null };
+
+export type Status = {
+  id: number;
+  userId: number;
+  text: string;
+  style: import('./statusStyles').StatusStyle;
+  /** Pen drawing and stickers on top of the text. */
+  art?: Partial<import('./statusStyles').StatusArt>;
+  createdAt: string;
+  expiresAt: string;
+  /** You've viewed it (your own are always seen). */
+  seen: boolean;
+  /** How many people viewed it (meaningful on your own). */
+  views: number;
+};
+
+export type StatusGroup = { user: User; statuses: Status[]; allSeen: boolean; latestAt: string };

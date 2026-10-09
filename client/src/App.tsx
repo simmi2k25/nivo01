@@ -11,6 +11,8 @@ import { LoginPage } from './pages/Login';
 import { MyProfilePage, UserProfilePage } from './pages/Profile';
 import { useAuth } from './stores/auth';
 import { useChat } from './stores/chat';
+import { startNews } from './stores/news';
+import { startStatuses } from './stores/status';
 import { startTogether } from './stores/together';
 
 // Heavy photobooth code (camera, WebRTC, strip editor) loads only when opened.
@@ -43,7 +45,14 @@ export function App() {
     useChat.getState().loadConversations().catch(() => {});
     useChat.getState().loadFriends().catch(() => {});
     import('./lib/push').then(({ startPush }) => startPush()).catch(() => {});
-    return startTogether();
+    const offNews = startNews();
+    const offTogether = startTogether();
+    const offStatuses = startStatuses();
+    return () => {
+      offNews();
+      offStatuses();
+      offTogether();
+    };
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (status === 'loading') {

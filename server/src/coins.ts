@@ -12,6 +12,7 @@ export const PRICES = {
   groupCreate: 5, // start a group chat
   groupJoin: 1, // accept a group invitation
   watermark: 2, // strips from one photobooth without the NivoTalk wordmark
+  chatsBg: 10, // your own background picture on the Chats screen
 } as const;
 
 export const MEMORY_PACKS = {

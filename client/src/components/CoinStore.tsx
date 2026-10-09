@@ -32,6 +32,7 @@ const REASONS: Record<string, string> = {
   gift_received: 'Gift from a friend',
   memory: 'More Memories space',
   wallpaper: 'Chat wallpaper',
+  chats_bg: 'Chats background',
   group_create: 'Started a group',
   group_join: 'Joined a group',
   watermark: 'Strip without watermark',
@@ -73,6 +74,7 @@ export function CoinStore() {
   const p = s.prices;
   const unlocks = [
     { icon: '🖼️', label: 'Chat wallpaper for everyone in the chat', cost: p.wallpaper },
+    { icon: '🌸', label: 'Your own Chats screen background', cost: p.chatsBg },
     { icon: '👯', label: 'Start a group chat', cost: p.groupCreate },
     { icon: '💌', label: 'Join a group you’re invited to', cost: p.groupJoin },
     { icon: '✨', label: 'Strips without the NivoTalk watermark (per booth)', cost: p.watermark },

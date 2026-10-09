@@ -4,6 +4,8 @@ import { useChat } from '../stores/chat';
 import { Avatar } from './Avatar';
 import { CoinStore } from './CoinStore';
 import { Icon, type IconName } from './Icon';
+import { NewsSheet } from './News';
+import { StatusComposer, StatusViewer } from './Status';
 
 const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: '/friends', label: 'Friends', icon: 'users' },
@@ -52,18 +54,17 @@ export function AppShell() {
         <Outlet />
       </main>
       <CoinStore />
+      <NewsSheet />
+      <StatusComposer />
+      <StatusViewer />
 
       {/* Phone floating tab bar */}
       {!immersive && (
         <nav className="safe-bottom pointer-events-none fixed inset-x-0 bottom-0 z-30 px-3 pb-2 md:hidden">
           <div className="pointer-events-auto mx-auto flex max-w-md items-end justify-around rounded-[26px] bg-surface/95 px-1.5 pt-1.5 pb-1.5 shadow-[0_8px_30px_rgba(90,111,208,0.18)] backdrop-blur">
-            {TABS.map((t) =>
-              t.to === '/together' ? (
-                <TogetherTab key={t.to} active={togetherActive} />
-              ) : (
-                <TabLink key={t.to} {...t} badge={t.to === '/chats' ? unread : 0} />
-              ),
-            )}
+            {TABS.map((t) => (
+              <TabLink key={t.to} {...t} badge={t.to === '/chats' ? unread : 0} forceActive={t.to === '/together' && togetherActive} />
+            ))}
             <NavLink to="/profile" className="group flex w-16 flex-col items-center gap-0.5 pt-1 text-[10.5px] font-bold text-muted">
               {({ isActive }) => (
                 <>
@@ -81,10 +82,13 @@ export function AppShell() {
   );
 }
 
-function TabLink({ to, label, icon, badge }: { to: string; label: string; icon: IconName; badge: number }) {
+function TabLink({ to, label, icon, badge, forceActive = false }: { to: string; label: string; icon: IconName; badge: number; forceActive?: boolean }) {
   return (
     <NavLink to={to} className="flex w-16 flex-col items-center gap-0.5 text-[10.5px] font-bold">
-      {({ isActive }) => (
+      {({ isActive: routeActive }) => {
+        // Together stays lit while you set up a booth, which lives under it.
+        const isActive = routeActive || forceActive;
+        return (
         <>
           <span
             className={`relative grid h-10 w-10 place-items-center rounded-full transition-all duration-300 ${
@@ -97,23 +101,8 @@ function TabLink({ to, label, icon, badge }: { to: string; label: string; icon: 
           </span>
           <span className={`-mt-1.5 transition ${isActive ? 'text-primary-strong' : 'text-muted'}`}>{label}</span>
         </>
-      )}
-    </NavLink>
-  );
-}
-
-/** The raised centre button of the phone tab bar. */
-function TogetherTab({ active }: { active: boolean }) {
-  return (
-    <NavLink to="/together" className="flex w-[72px] flex-col items-center text-[10.5px] font-bold" aria-label="Together">
-      <span
-        className={`-mt-7 grid h-[58px] w-[58px] place-items-center rounded-full bg-gradient-to-b from-primary to-primary-strong text-white shadow-[0_8px_22px_rgba(90,111,208,0.5)] ring-4 ring-bg transition ${
-          active ? 'scale-105' : ''
-        }`}
-      >
-        <Icon name="together" size={26} />
-      </span>
-      <span className={`mt-1 ${active ? 'text-primary-strong' : 'text-muted'}`}>Together</span>
+        );
+      }}
     </NavLink>
   );
 }

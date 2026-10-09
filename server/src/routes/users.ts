@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { one, query, tx } from '../db.js';
 import { fail, idParam, parse } from '../http.js';
 import { sniffImage } from '../images.js';
-import { BUDDIES, broadcastUserUpdate, getUser, publicUser, USER_COLS, type UserRow } from '../model.js';
+import { PRICES, pushBalance, spend } from '../coins.js';
+import { BUDDIES, broadcastUserUpdate, getUser, imageUrl, publicUser, USER_COLS, type UserRow } from '../model.js';
 import { USERNAME } from './auth.js';
 
 const router = Router();
@@ -83,6 +84,40 @@ function imageRoutes(kind: 'avatar' | 'cover', maxBytes: number) {
 }
 imageRoutes('avatar', 2 * 1024 * 1024);
 imageRoutes('cover', 5 * 1024 * 1024);
+
+// ---------- Chats screen background (costs coins; only you see it) ----------
+
+router.put('/me/chats-bg', uploadLimit, express.raw({ type: () => true, limit: 5 * 1024 * 1024 }), async (req, res) => {
+  const buf = req.body as Buffer;
+  if (!Buffer.isBuffer(buf) || !buf.length) throw fail(400, 'No image received');
+  const info = sniffImage(buf);
+  if (!info) throw fail(415, 'Please use a JPEG, PNG or WebP image');
+  if (info.width > 8000 || info.height > 8000) throw fail(413, 'That image is too large');
+  const coins = await tx(async (c) => {
+    const left = await spend(c, req.userId, PRICES.chatsBg, 'chats_bg');
+    const old = await c.query<{ id: number | null }>('SELECT chats_bg_image_id AS id FROM users WHERE id = $1 FOR UPDATE', [req.userId]);
+    const img = await c.query<{ id: number }>("INSERT INTO profile_images (owner_id, kind, mime, data) VALUES ($1, 'chats_bg', $2, $3) RETURNING id", [
+      req.userId,
+      info.mime,
+      buf,
+    ]);
+    await c.query('UPDATE users SET chats_bg_image_id = $2 WHERE id = $1', [req.userId, img.rows[0].id]);
+    if (old.rows[0]?.id) await c.query('DELETE FROM profile_images WHERE id = $1', [old.rows[0].id]);
+    return left;
+  });
+  await pushBalance(req.userId);
+  const row = await one<{ id: number }>('SELECT chats_bg_image_id AS id FROM users WHERE id = $1', [req.userId]);
+  res.json({ coins, chatsBgUrl: imageUrl(row?.id ?? null) });
+});
+
+router.delete('/me/chats-bg', async (req, res) => {
+  await tx(async (c) => {
+    const old = await c.query<{ id: number | null }>('SELECT chats_bg_image_id AS id FROM users WHERE id = $1 FOR UPDATE', [req.userId]);
+    await c.query('UPDATE users SET chats_bg_image_id = NULL WHERE id = $1', [req.userId]);
+    if (old.rows[0]?.id) await c.query('DELETE FROM profile_images WHERE id = $1', [old.rows[0].id]);
+  });
+  res.json({ chatsBgUrl: null });
+});
 
 router.get('/images/:id', async (req, res) => {
   const id = parse(idParam, req.params.id);
