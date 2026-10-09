@@ -59,11 +59,28 @@ const reload = () => {
   }, 300);
 };
 
+/** Drops statuses past their 24 hours, and anyone left with none, without waiting for a reload. */
+function pruneExpired() {
+  const now = Date.now();
+  const { groups } = useStatus.getState();
+  const next = groups
+    .map((g) => {
+      const statuses = g.statuses.filter((s) => new Date(s.expiresAt).getTime() > now);
+      return statuses.length === g.statuses.length ? g : { ...g, statuses, allSeen: statuses.every((s) => s.seen) };
+    })
+    .filter((g) => g.statuses.length > 0);
+  if (next.length !== groups.length || next.some((g, i) => g !== groups[i])) useStatus.setState({ groups: next });
+}
+
 export function startStatuses(): () => void {
   const off = onSocket((s) => {
     s.off('status:changed', reload).on('status:changed', reload);
     s.off('connect', reload).on('connect', reload);
     reload();
   });
-  return () => void off();
+  const sweep = setInterval(pruneExpired, 30_000);
+  return () => {
+    off();
+    clearInterval(sweep);
+  };
 }

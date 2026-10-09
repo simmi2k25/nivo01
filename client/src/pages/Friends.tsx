@@ -62,7 +62,8 @@ export function FriendsPage() {
     return g ? (g.allSeen ? 1 : 2) : 0;
   };
   const sorted = [...friends].sort((a, b) => Number(b.favorite) - Number(a.favorite) || Number(b.online) - Number(a.online));
-  const stories = [...sorted].sort((a, b) => rank(b) - rank(a));
+  // The story row only shows friends with a status up right now; new ones first.
+  const stories = sorted.filter((f) => groupFor(groups, f.id)).sort((a, b) => rank(b) - rank(a));
   const ringFor = (f: Friend) => {
     const g = groupFor(groups, f.id);
     return g ? (g.allSeen ? 'seen' : 'new') : f.online ? 'online' : f.favorite ? 'favorite' : 'none';
