@@ -40,8 +40,8 @@ function Identity({ user, editing }: { user: User; editing?: boolean }) {
   return (
     <div className="flex flex-col items-center text-center">
       {user.frame ? (
-        <span className="anim-pop delay-2 my-3 p-1">
-          <Avatar user={user} size={editing ? 112 : 96} />
+        <span className="anim-pop delay-2 my-5 p-1">
+          <Avatar user={user} size={editing ? 132 : 120} />
         </span>
       ) : (
         <span className="anim-pop delay-2 rounded-[30%] p-1 ring-2 ring-white/40">

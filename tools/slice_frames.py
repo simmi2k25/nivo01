@@ -22,6 +22,7 @@ OUT = ROOT / "client" / "public" / "frames"
 MANIFEST = ROOT / "client" / "src" / "data" / "frames.json"
 SERVER_IDS = ROOT / "server" / "src" / "frameIds.ts"
 SIZE = 384  # exported frames are square, this many px
+UNDER = 1.05  # photo radius as a share of the ring's inner radius
 JOIN = 6  # pieces this close (px, at sheet scale) are one piece
 ATTACH = 120  # small floating bits (bats, stars) this close join the nearest frame
 
@@ -39,7 +40,7 @@ PACKS = [
 
 
 def inscribed_circle(mask: np.ndarray):
-    """Biggest circle of empty space inside a frame's box, looked for near the middle."""
+    """Biggest circle of empty space inside a frame's box, looked for near the middle: a first guess at the hole."""
     h, w = mask.shape
     free = ~mask
     free[0, :] = free[-1, :] = free[:, 0] = free[:, -1] = False
@@ -47,7 +48,61 @@ def inscribed_circle(mask: np.ndarray):
     yy, xx = np.mgrid[0:h, 0:w]
     weight = 1 - 0.6 * (((yy - h / 2) / h) ** 2 + ((xx - w / 2) / w) ** 2)
     y, x = np.unravel_index(np.argmax(dist * weight), dist.shape)
-    return x, y, dist[y, x]
+    return float(x), float(y), float(dist[y, x])
+
+
+def ring_circle(ring: np.ndarray):
+    """Centre and inner radius of the ring itself.
+
+    Rays go out from the middle and stop at the first solid pixel. Decorations that reach into the
+    middle (an umbrella, a wave, a ghost) stop a few rays early, and gaps in brush rings let a few run
+    long; fitting a circle to the hits that agree with the typical distance ignores both.
+    """
+    h, w = ring.shape
+    cx, cy, r0 = inscribed_circle(ring)
+    angles = np.linspace(0, 2 * np.pi, 360, endpoint=False)
+    r = r0
+    for _ in range(4):
+        hits = []
+        for a in angles:
+            dx, dy = np.cos(a), np.sin(a)
+            for t in np.arange(max(4.0, r0 * 0.5), max(h, w), 1.5):
+                px, py = int(cx + dx * t), int(cy + dy * t)
+                if not (0 <= px < w and 0 <= py < h):
+                    break
+                if ring[py, px]:
+                    hits.append((cx + dx * t, cy + dy * t, t))
+                    break
+        if len(hits) < 60:
+            break
+        hits = np.array(hits)
+        pts = hits[:, :2]
+        # RANSAC: the circle that the most hits sit on is the ring; decorations and gaps are the rest.
+        rng = np.random.default_rng(7)
+        best, best_in = None, -1
+        for _ in range(600):
+            a, b, c3 = pts[rng.choice(len(pts), 3, replace=False)]
+            M = np.array([[2 * (b[0] - a[0]), 2 * (b[1] - a[1])], [2 * (c3[0] - a[0]), 2 * (c3[1] - a[1])]])
+            if abs(np.linalg.det(M)) < 1e-6:
+                continue
+            ox, oy = np.linalg.solve(M, [b @ b - a @ a, c3 @ c3 - a @ a])
+            rr = np.hypot(a[0] - ox, a[1] - oy)
+            if not (0.25 * max(h, w) < rr < 0.6 * max(h, w)):
+                continue
+            n_in = int((np.abs(np.hypot(pts[:, 0] - ox, pts[:, 1] - oy) - rr) < 0.03 * rr).sum())
+            if n_in > best_in:
+                best, best_in = (ox, oy, rr), n_in
+        if best is None:
+            break
+        ox, oy, rr = best
+        good = pts[np.abs(np.hypot(pts[:, 0] - ox, pts[:, 1] - oy) - rr) < 0.03 * rr]
+        # Least-squares circle through the agreeing hits.
+        A = np.c_[2 * good[:, 0], 2 * good[:, 1], np.ones(len(good))]
+        b = good[:, 0] ** 2 + good[:, 1] ** 2
+        (ncx, ncy, c), *_ = np.linalg.lstsq(A, b, rcond=None)
+        r = float(np.sqrt(c + ncx**2 + ncy**2))
+        cx, cy = float(ncx), float(ncy)
+    return cx, cy, r
 
 
 _sheets: dict[str, list] = {}
@@ -71,13 +126,15 @@ def frames_on(sheet: str):
         if sl is None:
             continue
         mine = groups[sl] == i
-        cx, cy, r = inscribed_circle(solid[sl] & mine)
+        cx, cy, r = ring_circle((rgba[sl][..., 3] > 140) & mine)
+        r *= UNDER  # the photo tucks a little under the ring so no gap shows
         tile = rgba[sl].copy()
         tile[..., 3] = np.where(mine, tile[..., 3], 0)
         h, w = mine.shape
         half = int(max(cx, w - cx, cy, h - cy)) + 6
+        cx, cy = int(round(cx)), int(round(cy))
         canvas = Image.new("RGBA", (2 * half, 2 * half), (0, 0, 0, 0))
-        canvas.alpha_composite(Image.fromarray(tile), (half - int(cx), half - int(cy)))
+        canvas.alpha_composite(Image.fromarray(tile), (half - cx, half - cy))
         found.append((sl[1].start + cx, sl[0].start + cy, canvas, (2 * half) / (2 * r)))
     width = rgba.shape[1]
     # Reading order: rows top to bottom, then left to right.
