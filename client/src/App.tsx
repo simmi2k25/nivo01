@@ -20,6 +20,7 @@ const BoothHome = lazy(() => import('./pages/booth/BoothHome'));
 const BoothRoom = lazy(() => import('./pages/booth/BoothRoom'));
 const TogetherHome = lazy(() => import('./pages/together/TogetherHome'));
 const ChillRoom = lazy(() => import('./pages/together/ChillRoom'));
+const UnoTable = lazy(() => import('./pages/uno/UnoTable'));
 const Memories = lazy(() => import('./pages/Memories'));
 const Scan = lazy(() => import('./pages/Scan'));
 
@@ -74,6 +75,7 @@ export function App() {
               <Route path="/friends" element={<FriendsPage />} />
               <Route path="/together" element={<TogetherHome />} />
               <Route path="/chill/:code" element={<ChillRoom />} />
+              <Route path="/uno/:code" element={<UnoTable />} />
               <Route path="/booth" element={<BoothHome />} />
               <Route path="/booth/:code" element={<BoothRoom />} />
               <Route path="/memories" element={<Memories />} />

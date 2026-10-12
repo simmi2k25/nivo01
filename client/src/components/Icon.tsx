@@ -64,6 +64,7 @@ const PATHS = {
   undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   pen: 'M15.5 4.5l4 4L8 20H4v-4L15.5 4.5ZM13 7l4 4',
   minus: 'M5 12h14',
+  cards: 'M3.6 8.4 11 6.2a1.5 1.5 0 0 1 1.9 1l3 10.2a1.5 1.5 0 0 1-1 1.9l-7.4 2.2a1.5 1.5 0 0 1-1.9-1L2.6 10.3a1.5 1.5 0 0 1 1-1.9ZM13.5 3.6l6 1.6a1.5 1.5 0 0 1 1 1.8l-2.4 8.8M8.6 12.6l1.8 3.6',
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -50,7 +50,7 @@ export function fmtTotal(ms: number) {
   return `${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
-export function AvatarStack({ users, max = 3, size = 34 }: { users: User[]; max?: number; size?: number }) {
+export function AvatarStack({ users, max = 3, size = 34 }: { users: Pick<User, 'id' | 'displayName' | 'avatar' | 'avatarUrl'>[]; max?: number; size?: number }) {
   const shown = users.slice(0, max);
   const extra = users.length - shown.length;
   return (

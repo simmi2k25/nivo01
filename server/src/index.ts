@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import { requireAuth } from './auth.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
+import { recoverUnoTables } from './realtime/uno.js';
 import { purgeExpired } from './delivery.js';
 import { errorHandler } from './http.js';
 import { createRealtime } from './realtime/socket.js';
@@ -15,6 +16,7 @@ import announcementRoutes from './routes/announcements.js';
 import authRoutes from './routes/auth.js';
 import blockRoutes from './routes/blocks.js';
 import chillRoutes from './routes/chill.js';
+import unoRoutes from './routes/uno.js';
 import coinRoutes from './routes/coins.js';
 import conversationRoutes from './routes/conversations.js';
 import friendRoutes from './routes/friends.js';
@@ -98,6 +100,7 @@ api.use('/coins', requireAuth, coinRoutes);
 api.use('/conversations', requireAuth, conversationRoutes);
 api.use('/rooms', requireAuth, roomRoutes);
 api.use('/chill', requireAuth, chillRoutes);
+api.use('/uno', requireAuth, unoRoutes);
 api.use('/photos', requireAuth, photoRoutes);
 api.use('/statuses', requireAuth, statusRoutes);
 api.use('/push', requireAuth, pushRoutes);
@@ -136,6 +139,7 @@ createRealtime(server, allowedOrigins);
 
 async function main() {
   await migrate();
+  await recoverUnoTables().catch((e) => console.error('[uno] recovery failed', e.message));
   // Delivered messages are removed as devices confirm them; this catches anything past 30 days.
   const sweep = () => {
     purgeExpired().catch((e) => console.error('[delivery] sweep failed', e.message));

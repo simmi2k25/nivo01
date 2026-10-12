@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 import { onSocket } from '../lib/socket';
-import type { LiveBooth, LiveChill } from '../lib/types';
+import type { LiveBooth, LiveChill, LiveUno } from '../lib/types';
 
 /** Chill Rooms and booths friends have going right now (Together tab, chat "live" strips). */
 type TogetherState = {
   rooms: LiveChill[];
   booths: LiveBooth[];
+  games: LiveUno[];
   loaded: boolean;
   load: () => Promise<void>;
 };
@@ -14,10 +15,11 @@ type TogetherState = {
 export const useTogether = create<TogetherState>((set) => ({
   rooms: [],
   booths: [],
+  games: [],
   loaded: false,
   async load() {
-    const r = await api<{ rooms: LiveChill[]; booths: LiveBooth[] }>('/chill/live');
-    set({ rooms: r.rooms, booths: r.booths, loaded: true });
+    const r = await api<{ rooms: LiveChill[]; booths: LiveBooth[]; games?: LiveUno[] }>('/chill/live');
+    set({ rooms: r.rooms, booths: r.booths, games: r.games ?? [], loaded: true });
   },
 }));
 

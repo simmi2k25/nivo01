@@ -543,6 +543,11 @@ function MessageRow({
               Join
             </Link>
           )}
+          {m.meta?.event === 'uno' && typeof m.meta.code === 'string' && (
+            <Link to={`/uno/${m.meta.code}`} className="-mr-1.5 rounded-full bg-[#ffe3df] px-2.5 py-0.5 font-bold text-[#c62828] dark:bg-danger/20 dark:text-[#ff8a80]">
+              Play
+            </Link>
+          )}
         </span>
       </div>
     );

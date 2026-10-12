@@ -37,6 +37,9 @@ const REASONS: Record<string, string> = {
   group_join: 'Joined a group',
   watermark: 'Strip without watermark',
   owner_grant: 'Owner top-up',
+  uno_bet: 'NivoTalk Cards bet',
+  uno_win: 'Won at NivoTalk Cards',
+  uno_refund: 'NivoTalk Cards bet refunded',
 };
 
 /** Balance, coin packs, what coins unlock, extra Memories space and recent history. */

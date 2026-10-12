@@ -156,3 +156,54 @@ export type Status = {
 };
 
 export type StatusGroup = { user: User; statuses: Status[]; allSeen: boolean; latestAt: string };
+
+export type UnoColor = 'red' | 'yellow' | 'green' | 'blue';
+export type UnoValue = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4';
+export type UnoCard = { id: string; color: UnoColor | 'wild'; value: UnoValue };
+export type UnoEvent = {
+  seq: number;
+  type: 'sit' | 'leave' | 'start' | 'play' | 'draw' | 'pass' | 'skip' | 'reverse' | 'penalty' | 'uno' | 'caught' | 'timeout' | 'forfeit' | 'reshuffle' | 'win';
+  by?: number;
+  target?: number;
+  card?: UnoCard;
+  count?: number;
+  color?: UnoColor;
+  amount?: number;
+};
+export type UnoPerson = Pick<User, 'id' | 'displayName' | 'avatar' | 'avatarUrl'>;
+export type UnoPlayer = { user: UnoPerson; bet: number; count: number; out: boolean; online: boolean };
+export type UnoState = {
+  code: string;
+  hostId: number;
+  conversationId: number | null;
+  minBet: number;
+  maxBet: number;
+  maxPlayers: number;
+  phase: 'lobby' | 'playing' | 'finished' | 'closed';
+  pot: number;
+  players: UnoPlayer[];
+  turnUserId: number | null;
+  direction: 1 | -1;
+  color: UnoColor;
+  pile: UnoCard[];
+  deckCount: number;
+  drewThisTurn: boolean;
+  unoPending: number | null;
+  turnEndsAt: number | null;
+  winnerId: number | null;
+  payout: number;
+  events: UnoEvent[];
+  serverNow: number;
+  you: { hand: UnoCard[]; drawnId: string | null; out: boolean } | null;
+};
+export type LiveUno = {
+  code: string;
+  hostId: number;
+  host: User | null;
+  conversationId: number | null;
+  phase: 'lobby' | 'playing';
+  players: UnoPerson[];
+  pot: number;
+  minBet: number;
+  maxBet: number;
+};
