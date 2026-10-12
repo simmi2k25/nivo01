@@ -1,6 +1,10 @@
 /** Detects the real image type from its bytes and reads its pixel size. */
 export function sniffImage(buf: Buffer): { mime: string; width: number; height: number } | null {
   if (buf.length < 32) return null;
+  // GIF (animated ones keep moving)
+  if (buf.toString('ascii', 0, 6) === 'GIF87a' || buf.toString('ascii', 0, 6) === 'GIF89a') {
+    return { mime: 'image/gif', width: buf.readUInt16LE(6), height: buf.readUInt16LE(8) };
+  }
   // PNG
   if (buf.readUInt32BE(0) === 0x89504e47 && buf.readUInt32BE(4) === 0x0d0a1a0a) {
     return { mime: 'image/png', width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };

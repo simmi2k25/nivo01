@@ -6,6 +6,7 @@ import { fail, idParam, parse } from '../http.js';
 import { sniffImage } from '../images.js';
 import { PRICES, pushBalance, spend } from '../coins.js';
 import { BUDDIES, broadcastUserUpdate, getUser, imageUrl, publicUser, USER_COLS, type UserRow } from '../model.js';
+import { FRAME_IDS } from '../frameIds.js';
 import { USERNAME } from './auth.js';
 
 const router = Router();
@@ -55,7 +56,7 @@ function imageRoutes(kind: 'avatar' | 'cover', maxBytes: number) {
       const buf = req.body as Buffer;
       if (!Buffer.isBuffer(buf) || !buf.length) throw fail(400, 'No image received');
       const info = sniffImage(buf);
-      if (!info) throw fail(415, 'Please use a JPEG, PNG or WebP image');
+      if (!info) throw fail(415, 'Please use a JPEG, PNG, WebP or GIF image');
       if (info.width > 8000 || info.height > 8000) throw fail(413, 'That image is too large');
 
       await tx(async (c) => {
@@ -82,8 +83,43 @@ function imageRoutes(kind: 'avatar' | 'cover', maxBytes: number) {
     res.json({ user: await getUser(req.userId) });
   });
 }
-imageRoutes('avatar', 2 * 1024 * 1024);
-imageRoutes('cover', 5 * 1024 * 1024);
+// Room for animated GIFs.
+imageRoutes('avatar', 4 * 1024 * 1024);
+imageRoutes('cover', 8 * 1024 * 1024);
+
+// ---------- profile frames (bought once with coins, worn one at a time) ----------
+
+router.get('/me/frames', async (req, res) => {
+  const r = await query<{ frame_id: string }>('SELECT frame_id FROM user_frames WHERE user_id = $1', [req.userId]);
+  res.json({ owned: r.rows.map((x) => x.frame_id).filter((id) => FRAME_IDS.has(id)), price: PRICES.frame });
+});
+
+/** Buys a frame (if you don't have it yet) and puts it on. */
+router.post('/me/frames/:frameId', async (req, res) => {
+  const frameId = String(req.params.frameId);
+  if (!FRAME_IDS.has(frameId)) throw fail(404, 'That frame doesn’t exist');
+  const coins = await tx(async (c) => {
+    const ins = await c.query('INSERT INTO user_frames (user_id, frame_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.userId, frameId]);
+    const left = ins.rowCount ? await spend(c, req.userId, PRICES.frame, 'frame', { frameId }) : null;
+    await c.query('UPDATE users SET frame = $2 WHERE id = $1', [req.userId, frameId]);
+    return left;
+  });
+  if (coins !== null) await pushBalance(req.userId);
+  await broadcastUserUpdate(req.userId);
+  res.json({ user: await getUser(req.userId), coins });
+});
+
+/** Wear a frame you own, or none. */
+router.put('/me/frame', async (req, res) => {
+  const { frameId } = parse(z.object({ frameId: z.string().max(40).nullable() }), req.body);
+  if (frameId) {
+    const owned = await one('SELECT 1 FROM user_frames WHERE user_id = $1 AND frame_id = $2', [req.userId, frameId]);
+    if (!owned || !FRAME_IDS.has(frameId)) throw fail(403, 'Get this frame first');
+  }
+  await query('UPDATE users SET frame = $2 WHERE id = $1', [req.userId, frameId]);
+  await broadcastUserUpdate(req.userId);
+  res.json({ user: await getUser(req.userId) });
+});
 
 // ---------- Chats screen background (costs coins; only you see it) ----------
 
@@ -91,7 +127,7 @@ router.put('/me/chats-bg', uploadLimit, express.raw({ type: () => true, limit: 5
   const buf = req.body as Buffer;
   if (!Buffer.isBuffer(buf) || !buf.length) throw fail(400, 'No image received');
   const info = sniffImage(buf);
-  if (!info) throw fail(415, 'Please use a JPEG, PNG or WebP image');
+  if (!info) throw fail(415, 'Please use a JPEG, PNG, WebP or GIF image');
   if (info.width > 8000 || info.height > 8000) throw fail(413, 'That image is too large');
   const coins = await tx(async (c) => {
     const left = await spend(c, req.userId, PRICES.chatsBg, 'chats_bg');

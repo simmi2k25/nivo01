@@ -1,17 +1,24 @@
+import { frameScale, frameUrl, isFrame } from '../lib/frames';
 import { BUDDY_STICKER, BUDDY_TINT, stickerUrl } from '../lib/stickers';
 import type { Buddy, User } from '../lib/types';
 
 type Props = {
-  user: Pick<User, 'avatar' | 'avatarUrl' | 'displayName'> & { online?: boolean };
+  user: Pick<User, 'avatar' | 'avatarUrl' | 'displayName'> & { online?: boolean; frame?: string | null };
   size?: number;
   showOnline?: boolean;
   rounded?: 'full' | 'xl';
   className?: string;
+  /** Leave the profile frame off (tight rows, stacked avatars). */
+  noFrame?: boolean;
 };
 
-/** Profile photo, or the user's buddy character on a soft tint when there's no photo. */
-export function Avatar({ user, size = 44, showOnline = false, rounded = 'full', className = '' }: Props) {
-  const radius = rounded === 'full' ? '9999px' : `${Math.round(size * 0.32)}px`;
+/** Frames only show where the avatar is big enough to make them out. */
+const MIN_FRAMED = 36;
+
+/** Profile photo, or the user's buddy character on a soft tint when there's no photo; with their frame around it. */
+export function Avatar({ user, size = 44, showOnline = false, rounded = 'full', className = '', noFrame = false }: Props) {
+  const frame = !noFrame && size >= MIN_FRAMED && isFrame(user.frame) ? user.frame : null;
+  const radius = rounded === 'full' || frame ? '9999px' : `${Math.round(size * 0.32)}px`;
   const buddy = (user.avatar in BUDDY_STICKER ? user.avatar : 'dino') as Buddy;
   return (
     <span className={`relative inline-block shrink-0 ${className}`} style={{ width: size, height: size }}>
@@ -28,6 +35,17 @@ export function Avatar({ user, size = 44, showOnline = false, rounded = 'full', 
         <span className="grid h-full w-full place-items-center overflow-hidden" style={{ borderRadius: radius, background: BUDDY_TINT[buddy] }}>
           <img src={stickerUrl(BUDDY_STICKER[buddy])} alt={user.displayName} className="h-[86%] w-[86%] object-contain" draggable={false} />
         </span>
+      )}
+      {frame && (
+        <img
+          src={frameUrl(frame)}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-1/2 max-w-none -translate-x-1/2 -translate-y-1/2 select-none"
+          style={{ width: size * frameScale(frame), height: size * frameScale(frame) }}
+          loading="lazy"
+          draggable={false}
+        />
       )}
       {showOnline && user.online && (
         <span

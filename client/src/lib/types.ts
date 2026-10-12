@@ -29,6 +29,8 @@ export type User = {
   memorySlots?: number;
   /** Your own Chats screen background (bought with coins). */
   chatsBgUrl?: string | null;
+  /** Profile frame drawn around the photo. */
+  frame?: string | null;
 };
 
 export type Friend = User & { favorite: boolean; mutual: boolean; addedAt: string };

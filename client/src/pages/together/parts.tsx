@@ -57,7 +57,7 @@ export function AvatarStack({ users, max = 3, size = 34 }: { users: Pick<User, '
     <span className="flex items-center">
       {shown.map((u, i) => (
         <span key={u.id} className="rounded-full ring-2 ring-surface" style={{ marginLeft: i ? -size * 0.3 : 0 }}>
-          <Avatar user={u} size={size} />
+          <Avatar user={u} size={size} noFrame />
         </span>
       ))}
       {extra > 0 && (

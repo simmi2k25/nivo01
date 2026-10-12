@@ -1,0 +1,308 @@
+{
+ "packs": [
+  {
+   "id": "ninja",
+   "name": "Ninja",
+   "frames": [
+    {
+     "id": "ninja-01",
+     "scale": 1.842
+    },
+    {
+     "id": "ninja-02",
+     "scale": 1.861
+    },
+    {
+     "id": "ninja-03",
+     "scale": 1.772
+    },
+    {
+     "id": "ninja-04",
+     "scale": 2.123
+    },
+    {
+     "id": "ninja-05",
+     "scale": 1.871
+    },
+    {
+     "id": "ninja-06",
+     "scale": 1.991
+    },
+    {
+     "id": "ninja-07",
+     "scale": 1.935
+    }
+   ]
+  },
+  {
+   "id": "spooky",
+   "name": "Spooky",
+   "frames": [
+    {
+     "id": "spooky-01",
+     "scale": 2.241
+    },
+    {
+     "id": "spooky-02",
+     "scale": 3.205
+    },
+    {
+     "id": "spooky-03",
+     "scale": 2.267
+    },
+    {
+     "id": "spooky-04",
+     "scale": 2.256
+    },
+    {
+     "id": "spooky-05",
+     "scale": 2.339
+    },
+    {
+     "id": "spooky-06",
+     "scale": 2.555
+    },
+    {
+     "id": "spooky-07",
+     "scale": 2.433
+    }
+   ]
+  },
+  {
+   "id": "crochet",
+   "name": "Crochet",
+   "frames": [
+    {
+     "id": "crochet-01",
+     "scale": 1.861
+    },
+    {
+     "id": "crochet-02",
+     "scale": 2.164
+    },
+    {
+     "id": "crochet-03",
+     "scale": 1.867
+    },
+    {
+     "id": "crochet-04",
+     "scale": 1.703
+    },
+    {
+     "id": "crochet-05",
+     "scale": 1.885
+    },
+    {
+     "id": "crochet-06",
+     "scale": 2.439
+    },
+    {
+     "id": "crochet-07",
+     "scale": 2.21
+    }
+   ]
+  },
+  {
+   "id": "gamer",
+   "name": "Gamer",
+   "frames": [
+    {
+     "id": "gamer-01",
+     "scale": 1.702
+    },
+    {
+     "id": "gamer-02",
+     "scale": 1.488
+    },
+    {
+     "id": "gamer-03",
+     "scale": 1.564
+    },
+    {
+     "id": "gamer-04",
+     "scale": 1.781
+    },
+    {
+     "id": "gamer-05",
+     "scale": 1.536
+    },
+    {
+     "id": "gamer-06",
+     "scale": 1.892
+    },
+    {
+     "id": "gamer-07",
+     "scale": 2.232
+    },
+    {
+     "id": "gamer-08",
+     "scale": 1.828
+    }
+   ]
+  },
+  {
+   "id": "japan",
+   "name": "Japan",
+   "frames": [
+    {
+     "id": "japan-01",
+     "scale": 2.275
+    },
+    {
+     "id": "japan-02",
+     "scale": 1.961
+    },
+    {
+     "id": "japan-03",
+     "scale": 1.902
+    },
+    {
+     "id": "japan-04",
+     "scale": 2.403
+    },
+    {
+     "id": "japan-05",
+     "scale": 1.897
+    },
+    {
+     "id": "japan-06",
+     "scale": 3.011
+    },
+    {
+     "id": "japan-07",
+     "scale": 2.838
+    },
+    {
+     "id": "japan-08",
+     "scale": 2.33
+    },
+    {
+     "id": "japan-09",
+     "scale": 2.354
+    },
+    {
+     "id": "japan-10",
+     "scale": 1.87
+    },
+    {
+     "id": "japan-11",
+     "scale": 2.137
+    },
+    {
+     "id": "japan-12",
+     "scale": 2.363
+    },
+    {
+     "id": "japan-13",
+     "scale": 2.015
+    },
+    {
+     "id": "japan-14",
+     "scale": 2.099
+    },
+    {
+     "id": "japan-15",
+     "scale": 2.412
+    }
+   ]
+  },
+  {
+   "id": "paper",
+   "name": "Paper Cute",
+   "frames": [
+    {
+     "id": "paper-01",
+     "scale": 1.979
+    },
+    {
+     "id": "paper-02",
+     "scale": 1.866
+    },
+    {
+     "id": "paper-03",
+     "scale": 2.26
+    },
+    {
+     "id": "paper-04",
+     "scale": 1.846
+    },
+    {
+     "id": "paper-05",
+     "scale": 1.875
+    },
+    {
+     "id": "paper-06",
+     "scale": 3.043
+    },
+    {
+     "id": "paper-07",
+     "scale": 2.087
+    }
+   ]
+  },
+  {
+   "id": "scrapbook",
+   "name": "Scrapbook",
+   "frames": [
+    {
+     "id": "scrapbook-01",
+     "scale": 1.616
+    },
+    {
+     "id": "scrapbook-02",
+     "scale": 1.711
+    },
+    {
+     "id": "scrapbook-03",
+     "scale": 1.717
+    },
+    {
+     "id": "scrapbook-04",
+     "scale": 1.796
+    },
+    {
+     "id": "scrapbook-05",
+     "scale": 1.775
+    },
+    {
+     "id": "scrapbook-06",
+     "scale": 1.477
+    },
+    {
+     "id": "scrapbook-07",
+     "scale": 1.899
+    }
+   ]
+  },
+  {
+   "id": "fantasy",
+   "name": "Fantasy",
+   "frames": [
+    {
+     "id": "fantasy-01",
+     "scale": 2.061
+    },
+    {
+     "id": "fantasy-02",
+     "scale": 2.037
+    },
+    {
+     "id": "fantasy-03",
+     "scale": 1.707
+    },
+    {
+     "id": "fantasy-04",
+     "scale": 2.283
+    },
+    {
+     "id": "fantasy-05",
+     "scale": 3.382
+    },
+    {
+     "id": "fantasy-06",
+     "scale": 2.402
+    }
+   ]
+  }
+ ]
+}

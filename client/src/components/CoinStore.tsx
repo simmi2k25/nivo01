@@ -37,6 +37,7 @@ const REASONS: Record<string, string> = {
   group_join: 'Joined a group',
   watermark: 'Strip without watermark',
   owner_grant: 'Owner top-up',
+  frame: 'Profile frame',
   uno_bet: 'NivoTalk Cards bet',
   uno_win: 'Won at NivoTalk Cards',
   uno_refund: 'NivoTalk Cards bet refunded',
@@ -78,6 +79,7 @@ export function CoinStore() {
   const unlocks = [
     { icon: '🖼️', label: 'Chat wallpaper for everyone in the chat', cost: p.wallpaper },
     { icon: '🌸', label: 'Your own Chats screen background', cost: p.chatsBg },
+    { icon: '💫', label: 'A profile frame, yours to keep', cost: p.frame },
     { icon: '👯', label: 'Start a group chat', cost: p.groupCreate },
     { icon: '💌', label: 'Join a group you’re invited to', cost: p.groupJoin },
     { icon: '✨', label: 'Strips without the NivoTalk watermark (per booth)', cost: p.watermark },

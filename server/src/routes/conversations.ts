@@ -242,7 +242,7 @@ router.put('/:id/wallpaper', express.raw({ type: () => true, limit: WALLPAPER_BY
   const buf = req.body as Buffer;
   if (!Buffer.isBuffer(buf) || !buf.length) throw fail(400, 'No image received');
   const info = sniffImage(buf);
-  if (!info) throw fail(415, 'Please use a JPEG, PNG or WebP image');
+  if (!info) throw fail(415, 'Please use a JPEG, PNG, WebP or GIF image');
   if (info.width > 4000 || info.height > 4000) throw fail(413, 'That image is too large');
   const coins = await tx(async (c) => {
     const left = await spend(c, req.userId, PRICES.wallpaper, 'wallpaper', { conversationId: id });

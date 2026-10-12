@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { Avatar, BuddyAvatar } from '../components/Avatar';
+import { FrameSheet } from '../components/FrameSheet';
 import { Icon, type IconName } from '../components/Icon';
 import { CoinButton } from '../components/CoinStore';
 import { Loader } from '../components/Loader';
@@ -38,9 +39,15 @@ function ActionButton({ icon, label, onClick, disabled }: { icon: IconName; labe
 function Identity({ user, editing }: { user: User; editing?: boolean }) {
   return (
     <div className="flex flex-col items-center text-center">
-      <span className="anim-pop delay-2 rounded-[30%] p-1 ring-2 ring-white/40">
-        <Avatar user={user} size={editing ? 112 : 96} rounded="xl" />
-      </span>
+      {user.frame ? (
+        <span className="anim-pop delay-2 my-3 p-1">
+          <Avatar user={user} size={editing ? 112 : 96} />
+        </span>
+      ) : (
+        <span className="anim-pop delay-2 rounded-[30%] p-1 ring-2 ring-white/40">
+          <Avatar user={user} size={editing ? 112 : 96} rounded="xl" />
+        </span>
+      )}
       {!editing && (
         <>
           <h1 className="anim-rise delay-3 mt-3 flex items-center gap-1.5 text-2xl font-semibold drop-shadow">
@@ -147,6 +154,7 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
   const [previews, setPreviews] = useState<{ avatar?: string; cover?: string }>({});
   const [photoSheet, setPhotoSheet] = useState(false);
   const [songSheet, setSongSheet] = useState(false);
+  const [frameSheet, setFrameSheet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
@@ -154,8 +162,17 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
 
   useEffect(() => () => Object.values(previews).forEach((u) => u && URL.revokeObjectURL(u)), [previews]);
 
+  /** GIFs go up as they are so they keep moving (cropping would freeze them). */
+  function takeGif(kind: 'avatar' | 'cover', file: File) {
+    const max = kind === 'avatar' ? 4 : 8;
+    if (file.size > max * 1024 * 1024) return toast(`GIFs can be up to ${max} MB`, 'error');
+    setPending((p) => ({ ...p, [kind]: file }));
+    setPreviews((p) => ({ ...p, [kind]: URL.createObjectURL(file) }));
+  }
+
   async function pickImage(kind: 'avatar' | 'cover', file?: File) {
     if (!file) return;
+    if (file.type === 'image/gif') return takeGif(kind, file);
     try {
       // Prepared on the device: rotation applied, cropped/scaled, JPEG.
       const blob = await prepareImage(file, kind === 'avatar' ? { square: true, max: 640 } : { max: 1440 });
@@ -278,10 +295,17 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
           }}
         />
         <ActionButton icon="smile" label="Photo & buddy" onClick={() => setPhotoSheet(true)} />
+        <ActionButton icon="sparkle" label="Frames" onClick={() => setFrameSheet(true)} />
       </div>
 
       <input ref={coverInput} type="file" accept="image/*" hidden onChange={(e) => (pickImage('cover', e.target.files?.[0]), (e.target.value = ''))} />
-      <input ref={avatarInput} type="file" accept="image/*" hidden onChange={(e) => (setCropFile(e.target.files?.[0] ?? null), (e.target.value = ''))} />
+      <input ref={avatarInput} type="file" accept="image/*" hidden onChange={(e) => {
+          const f = e.target.files?.[0] ?? null;
+          e.target.value = '';
+          if (f?.type === 'image/gif') takeGif('avatar', f);
+          else setCropFile(f);
+        }}
+      />
       <PhotoCropper
         file={cropFile}
         onCancel={() => setCropFile(null)}
@@ -295,7 +319,10 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
       <Sheet open={photoSheet} onClose={() => setPhotoSheet(false)} title="Photo & buddy">
         <div className="grid grid-cols-1 gap-2">
           <button className="btn btn-primary w-full" onClick={() => (setPhotoSheet(false), avatarInput.current?.click())}>
-            <Icon name="image" size={19} /> Choose a photo
+            <Icon name="image" size={19} /> Choose a photo or GIF
+          </button>
+          <button className="btn btn-soft w-full" onClick={() => (setPhotoSheet(false), setFrameSheet(true))}>
+            <Icon name="sparkle" size={19} /> Frames
           </button>
           {avatarShown && (
             <button
@@ -319,6 +346,7 @@ function EditProfile({ me, onDone }: { me: User; onDone: () => void }) {
           </div>
         </div>
       </Sheet>
+      <FrameSheet open={frameSheet} onClose={() => setFrameSheet(false)} preview={draft} />
       <SongPicker
         open={songSheet}
         onClose={() => setSongSheet(false)}

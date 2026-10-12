@@ -8,7 +8,7 @@ export const BUDDIES = ['berri', 'chatty', 'dino', 'pepo', 'pomi'] as const;
 export const STICKER_ID = /^(berri|chatty|dino|pepo|pomi)-\d{2,3}$/;
 
 export const USER_COLS = `u.id, u.username, u.display_name, u.status_message, u.avatar, u.theme_color,
-  u.last_seen_at, u.avatar_image_id, u.cover_image_id, u.profile_song, u.is_admin`;
+  u.last_seen_at, u.avatar_image_id, u.cover_image_id, u.profile_song, u.is_admin, u.frame`;
 
 export type UserRow = {
   id: number;
@@ -22,6 +22,7 @@ export type UserRow = {
   cover_image_id: number | null;
   profile_song: unknown;
   is_admin: boolean;
+  frame: string | null;
 };
 
 export const imageUrl = (id: number | null) => (id ? `/api/users/images/${id}` : null);
@@ -41,6 +42,8 @@ export function publicUser(u: UserRow) {
     online: isOnline(u.id),
     /** The official NivoTalk account: posts announcements, shown with a badge. */
     isAdmin: !!u.is_admin,
+    /** Profile frame drawn around the photo (see client/public/frames). */
+    frame: u.frame ?? null,
   };
 }
 export type PublicUser = ReturnType<typeof publicUser>;
