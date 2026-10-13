@@ -9,6 +9,8 @@ import { liveBooths } from '../realtime/booth.js';
 import { CHILL_CODE, closeChill, findOpenChill, liveChillRooms, notifyTogether, type ChillRow } from '../realtime/chill.js';
 import { isForeground } from '../realtime/hub.js';
 import { liveUnoTables } from '../realtime/uno.js';
+import { liveChipBoomTables } from '../realtime/chipboom.js';
+import { liveGuessTables } from '../realtime/guess.js';
 
 const router = Router();
 
@@ -95,12 +97,16 @@ router.get('/live', async (req, res) => {
   const rooms = liveChillRooms().filter((r) => visible(r.hostId, r.conversationId, r.listeners.map((l) => l.id), r.private));
   const booths = liveBooths().filter((b) => visible(b.hostId, b.conversationId, b.participants.map((p) => p.userId), b.private));
   const games = liveUnoTables().filter((g) => visible(g.hostId, g.conversationId, g.players.map((p) => p.id)));
+  const chipBoom = liveChipBoomTables().filter((g) => visible(g.hostId, g.conversationId, g.players.map((p) => p.id)));
+  const guess = liveGuessTables().filter((g) => visible(g.hostId, g.conversationId, g.players.map((p) => p.id)));
   const hosts = new Map<number, Awaited<ReturnType<typeof getUser>>>();
-  for (const id of new Set([...rooms.map((r) => r.hostId), ...booths.map((b) => b.hostId), ...games.map((g) => g.hostId)])) hosts.set(id, await getUser(id));
+  for (const id of new Set([...rooms.map((r) => r.hostId), ...booths.map((b) => b.hostId), ...games.map((g) => g.hostId), ...chipBoom.map((g) => g.hostId), ...guess.map((g) => g.hostId)])) hosts.set(id, await getUser(id));
   res.json({
     rooms: rooms.map((r) => ({ ...r, host: hosts.get(r.hostId) })),
     booths: booths.map((b) => ({ code: b.code, hostId: b.hostId, host: hosts.get(b.hostId), conversationId: b.conversationId, people: b.participants.map((p) => p.user) })),
     games: games.map((g) => ({ ...g, host: hosts.get(g.hostId) })),
+    chipBoom: chipBoom.map((g) => ({ ...g, host: hosts.get(g.hostId) })),
+    guess: guess.map((g) => ({ ...g, host: hosts.get(g.hostId) })),
   });
 });
 

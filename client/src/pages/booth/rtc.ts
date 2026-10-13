@@ -1,27 +1,23 @@
-import type { Socket } from 'socket.io-client';
-
 type Peer = { pc: RTCPeerConnection; initiator: boolean; pending: RTCIceCandidateInit[]; stream: MediaStream };
-type Signal = { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+export type Signal = { sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 
 /**
- * Full mesh between booth participants. The newcomer initiates offers to everyone already there,
- * so two sides never offer at once. Video goes device-to-device; the server only relays signaling.
+ * Full mesh between booth participants (or players in a game's voice chat). The newcomer initiates offers
+ * to everyone already there, so two sides never offer at once. Media goes device-to-device; the server
+ * only relays signaling.
  */
 export class Mesh {
   private peers = new Map<number, Peer>();
   private closed = false;
 
   constructor(
-    private code: string,
-    private socket: Socket,
+    private send: (to: number, data: Signal) => void,
     private iceServers: RTCIceServer[],
     private local: MediaStream | null,
     private onStream: (userId: number, stream: MediaStream | null) => void,
+    /** What to receive when we have nothing to send: the booth wants video too, voice chat only audio. */
+    private receive: ('audio' | 'video')[] = ['video', 'audio'],
   ) {}
-
-  private send(to: number, data: Signal) {
-    this.socket.emit('booth:signal', { code: this.code, to, data });
-  }
 
   private create(userId: number, initiator: boolean) {
     this.remove(userId);
@@ -31,9 +27,8 @@ export class Mesh {
 
     if (this.local) for (const t of this.local.getTracks()) pc.addTrack(t, this.local);
     else {
-      // No camera: still receive everyone else's video.
-      pc.addTransceiver('video', { direction: 'recvonly' });
-      pc.addTransceiver('audio', { direction: 'recvonly' });
+      // Nothing to send (no camera / mic): still receive everyone else's.
+      for (const kind of this.receive) pc.addTransceiver(kind, { direction: 'recvonly' });
     }
 
     pc.onicecandidate = (e) => e.candidate && this.send(userId, { candidate: e.candidate.toJSON() });

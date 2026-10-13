@@ -15,22 +15,27 @@ import { useTogether } from '../../stores/together';
 import { GroupAvatar } from '../Chats';
 import { UnoCardFace } from '../uno/UnoCard';
 import { CreateTableSheet } from '../uno/UnoSheets';
+import { BombArt } from '../chipboom/art';
+import { CreateChipBoomSheet } from '../chipboom/CbSheets';
+import { CreateGuessSheet } from '../guess/GnSheets';
 import { CoverArt, LiveBars } from './parts';
 
 export default function TogetherHome() {
   const nav = useNavigate();
   const me = useAuth((s) => s.user)!;
-  const { rooms, booths, games, loaded } = useTogether();
+  const { rooms, booths, games, chipBoom, guess, loaded } = useTogether();
   const [opening, setOpening] = useState(false);
   const [dealing, setDealing] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [chipping, setChipping] = useState(false);
+  const [guessing, setGuessing] = useState(false);
 
   useEffect(() => {
     useTogether.getState().load().catch(() => {});
   }, []);
 
   const whose = (host: { id: number; displayName: string } | null) => (host?.id === me.id ? 'Your' : host ? `${host.displayName}’s` : 'A');
-  const live = games.length + rooms.length + booths.length;
+  const live = games.length + chipBoom.length + guess.length + rooms.length + booths.length;
 
   return (
     <div className="chill-bg relative h-full overflow-hidden">
@@ -47,26 +52,39 @@ export default function TogetherHome() {
 
         <CardsHero onCreate={() => setDealing(true)} onJoin={() => setJoining(true)} />
 
+        {/* The four activities share one card colour; only their buttons carry each one's accent. */}
         <div className="mt-4 grid gap-4 md:mt-5 md:grid-cols-2 md:gap-5">
           <ActivityRow
-            icon="camera"
+            art={<Icon name="camera" size={28} />}
             title="Photobooth"
             text={['One strip, up to 4 friends', 'Snap one strip together, up to 4 friends']}
             cta={['Start', 'Start a booth']}
             onClick={() => nav('/booth')}
-            className="bg-surface"
             iconClass="bg-primary-soft text-primary-strong"
-            buttonClass="bg-gradient-to-r from-[#5b6ad8] to-[#7a82e6] shadow-[0_10px_22px_rgba(86,105,210,0.35)]"
           />
           <ActivityRow
-            icon="music"
+            art={<Icon name="music" size={28} />}
             title="Chill Room"
             text={['Songs in sync, chat together', 'Listen to full songs in sync and chat']}
             cta={['Open', 'Open a room']}
             onClick={() => setOpening(true)}
-            className="bg-gradient-to-br from-[#f6f8ff] to-[#e9f0ff] dark:from-surface dark:to-surface-2"
             iconClass="bg-[#dce9ff] text-[#2f6fd6] dark:bg-primary-soft dark:text-primary-strong"
-            buttonClass="bg-gradient-to-b from-[#3a7be0] to-[#2563d0] shadow-[0_10px_22px_rgba(44,106,208,0.35)]"
+          />
+          <ActivityRow
+            art={<BombArt size={34} />}
+            title="Chip or Boom"
+            text={['Find chips, dodge bombs', 'Blue grid vs pink grid. Find chips, dodge bombs']}
+            cta={['Play', 'Play now']}
+            onClick={() => setChipping(true)}
+            iconClass="bg-gradient-to-br from-[#e6eeff] to-[#ffe7ee] dark:from-[#1c2748] dark:to-[#361f30]"
+          />
+          <ActivityRow
+            art={<span className="font-display text-[30px] leading-none font-bold">?</span>}
+            title="Guess the number"
+            text={['Crack your friend’s number', 'Crack your friend’s secret number first']}
+            cta={['Play', 'Play now']}
+            onClick={() => setGuessing(true)}
+            iconClass="bg-[#fff1cf] text-[#b26b00] dark:bg-[#3a2f12] dark:text-[#ffd36b]"
           />
         </div>
 
@@ -88,6 +106,26 @@ export default function TogetherHome() {
               text={`NivoTalk Cards · ${g.phase === 'lobby' ? `${g.players.length} of 4 seated` : 'playing now'}`}
               cta={g.phase === 'lobby' && g.players.length < 4 ? 'Join' : 'Watch'}
               onClick={() => nav(`/uno/${g.code}`)}
+            />
+          ))}
+          {chipBoom.map((g) => (
+            <LiveRow
+              key={g.code}
+              art={g.host ? <Avatar user={g.host} size={58} /> : <Tile icon="cards" />}
+              title={`${whose(g.host)} Chip or Boom`}
+              text={g.phase === 'lobby' ? `Chip or Boom · ${g.players.length} of 2 · ${g.stake} coins each` : 'Chip or Boom · playing now'}
+              cta={g.phase === 'lobby' && g.players.length < 2 ? 'Join' : 'Watch'}
+              onClick={() => nav(`/chipboom/${g.code}`)}
+            />
+          ))}
+          {guess.map((g) => (
+            <LiveRow
+              key={g.code}
+              art={g.host ? <Avatar user={g.host} size={58} /> : <Tile icon="cards" />}
+              title={`${whose(g.host)} Guess the number`}
+              text={g.phase === 'lobby' ? `Guess the number · ${g.players.length} of 4 · ${g.stake} coins each` : 'Guess the number · playing now'}
+              cta={g.phase === 'lobby' && g.players.length < 4 ? 'Join' : 'Watch'}
+              onClick={() => nav(`/guess/${g.code}`)}
             />
           ))}
           {rooms.map((r) => (
@@ -116,6 +154,8 @@ export default function TogetherHome() {
       <OpenRoomSheet open={opening} onClose={() => setOpening(false)} />
       <CreateTableSheet open={dealing} onClose={() => setDealing(false)} />
       <JoinCodeSheet open={joining} onClose={() => setJoining(false)} />
+      <CreateChipBoomSheet open={chipping} onClose={() => setChipping(false)} />
+      <CreateGuessSheet open={guessing} onClose={() => setGuessing(false)} />
     </div>
   );
 }
@@ -190,20 +230,17 @@ function CardsHero({ onCreate, onJoin }: { onCreate: () => void; onJoin: () => v
 }
 
 function ActivityRow(p: {
-  icon: IconName;
+  art: ReactNode;
   title: string;
   text: [string, string];
   cta: [string, string];
   onClick: () => void;
-  className: string;
   iconClass: string;
-  buttonClass: string;
+  disabled?: boolean;
 }) {
   return (
-    <section className={`anim-rise flex items-center gap-4 rounded-[28px] p-4 shadow-[var(--shadow-sm)] md:gap-5 md:p-6 ${p.className}`}>
-      <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-[20px] md:h-[68px] md:w-[68px] ${p.iconClass}`}>
-        <Icon name={p.icon} size={28} />
-      </span>
+    <section className="anim-rise flex items-center gap-4 rounded-[28px] bg-surface p-4 shadow-[var(--shadow-sm)] md:gap-5 md:p-6">
+      <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-[20px] md:h-[68px] md:w-[68px] ${p.iconClass}`}>{p.art}</span>
       <span className="min-w-0 flex-1">
         <span className="block font-display text-[22px] leading-tight font-bold md:text-[26px]">{p.title}</span>
         <span className="block leading-snug text-muted">
@@ -211,7 +248,12 @@ function ActivityRow(p: {
           <span className="hidden md:inline">{p.text[1]}</span>
         </span>
       </span>
-      <button className={`btn h-12 shrink-0 px-6 text-white md:h-14 md:px-7 md:text-lg ${p.buttonClass}`} onClick={p.onClick}>
+      {/* One button style for every activity, so the row reads as a set. */}
+      <button
+        className="btn h-12 w-[92px] shrink-0 bg-gradient-to-r from-[#5b6ad8] to-[#7a82e6] px-0 text-[16px] text-white shadow-[0_10px_22px_rgba(86,105,210,0.35)] disabled:opacity-55 disabled:shadow-none md:h-14 md:w-[156px] md:text-lg"
+        onClick={p.onClick}
+        disabled={p.disabled}
+      >
         <span className="md:hidden">{p.cta[0]}</span>
         <span className="hidden md:inline">{p.cta[1]}</span>
       </button>
@@ -268,11 +310,16 @@ function JoinCodeSheet({ open, onClose }: { open: boolean; onClose: () => void }
     if (c.length !== 6) return toast('Table codes have 6 letters and numbers', 'error');
     setBusy(true);
     try {
-      const t = await api<{ phase: string }>(`/uno/${c}`);
-      if (t.phase === 'closed' || t.phase === 'finished') return toast('That table has already closed', 'error');
+      // The code could belong to any of the games.
+      const paths = ['uno', 'chipboom', 'guess'];
+      const tries = await Promise.allSettled(paths.map((p) => api<{ phase: string }>(`/${p}/${c}`)));
+      const i = tries.findIndex((t) => t.status === 'fulfilled');
+      const found = i >= 0 ? { t: (tries[i] as PromiseFulfilledResult<{ phase: string }>).value, path: paths[i] } : null;
+      if (!found) throw (tries[0] as PromiseRejectedResult).reason;
+      if (found.t.phase === 'closed' || found.t.phase === 'finished') return toast('That table has already closed', 'error');
       onClose();
       setCode('');
-      nav(`/uno/${c}`);
+      nav(`/${found.path}/${c}`);
     } catch (err) {
       toast(errorText(err), 'error');
     } finally {

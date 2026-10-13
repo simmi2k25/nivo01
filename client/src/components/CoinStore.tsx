@@ -41,6 +41,12 @@ const REASONS: Record<string, string> = {
   uno_bet: 'NivoTalk Cards bet',
   uno_win: 'Won at NivoTalk Cards',
   uno_refund: 'NivoTalk Cards bet refunded',
+  cb_bet: 'Chip or Boom stake',
+  cb_win: 'Won at Chip or Boom',
+  cb_refund: 'Chip or Boom stake refunded',
+  gn_bet: 'Guess the Number stake',
+  gn_win: 'Won at Guess the Number',
+  gn_refund: 'Guess the Number stake refunded',
 };
 
 /** Balance, coin packs, what coins unlock, extra Memories space and recent history. */

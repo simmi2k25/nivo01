@@ -33,6 +33,7 @@ const MAX_MISSED = 3;
 const LOBBY_TTL_MS = 30 * 60_000;
 const FINISHED_TTL_MS = 10 * 60_000;
 const KEEP_EVENTS = 16;
+const MAX_COMMENT = 80;
 const EMOTES = ['😂', '😮', '😡', '🔥', '👏', '😭', '🥶', '😈'];
 
 type Person = { id: number; displayName: string; avatar: string; avatarUrl: string | null };
@@ -566,6 +567,7 @@ export function attachUno(socket: Socket) {
   const watching = new Set<string>();
   let lastMove = 0;
   let lastEmote = 0;
+  let lastSay = 0;
 
   const gameFor = (raw: unknown) => {
     const parsed = UNO_CODE.safeParse(raw);
@@ -639,6 +641,18 @@ export function attachUno(socket: Socket) {
     if (!g || !seatOf(g, userId) || !EMOTES.includes(String(payload?.emoji)) || now - lastEmote < 800) return;
     lastEmote = now;
     getIo().to(roomOf(g.code)).emit('uno:emote', { code: g.code, userId, emoji: payload.emoji });
+  });
+
+  // Quick table comments: they float on everyone's screen for a few seconds and aren't kept.
+  socket.on('uno:say', async (payload: { code?: string; text?: string }) => {
+    const g = gameFor(payload?.code);
+    const now = Date.now();
+    const text = typeof payload?.text === 'string' ? payload.text.replace(/\s+/g, ' ').trim().slice(0, MAX_COMMENT) : '';
+    if (!g || !text || !watching.has(g.code) || now - lastSay < 1200) return;
+    lastSay = now;
+    const user = seatOf(g, userId)?.user ?? (await getUser(userId).then((u) => (u ? person(u) : null)));
+    if (!user) return;
+    getIo().to(roomOf(g.code)).emit('uno:say', { code: g.code, id: crypto.randomUUID(), user, text });
   });
 
   socket.on('disconnect', () => {

@@ -22,6 +22,8 @@ const BoothRoom = lazy(() => import('./pages/booth/BoothRoom'));
 const TogetherHome = lazy(() => import('./pages/together/TogetherHome'));
 const ChillRoom = lazy(() => import('./pages/together/ChillRoom'));
 const UnoTable = lazy(() => import('./pages/uno/UnoTable'));
+const ChipBoom = lazy(() => import('./pages/chipboom/ChipBoom'));
+const GuessGame = lazy(() => import('./pages/guess/GuessGame'));
 const Memories = lazy(() => import('./pages/Memories'));
 const Scan = lazy(() => import('./pages/Scan'));
 
@@ -78,6 +80,8 @@ export function App() {
               <Route path="/together" element={<TogetherHome />} />
               <Route path="/chill/:code" element={<ChillRoom />} />
               <Route path="/uno/:code" element={<UnoTable />} />
+              <Route path="/chipboom/:code" element={<ChipBoom />} />
+              <Route path="/guess/:code" element={<GuessGame />} />
               <Route path="/booth" element={<BoothHome />} />
               <Route path="/booth/:code" element={<BoothRoom />} />
               <Route path="/memories" element={<Memories />} />

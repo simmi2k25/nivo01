@@ -25,7 +25,7 @@ export function AppShell() {
   const loc = useLocation();
   // Inside a chat, a live booth or a Chill Room the phone tab bar steps aside for the composer / camera / player.
   const immersive =
-    /^\/chats\/\d+/.test(loc.pathname) || /^\/(booth|chill|uno)\/[A-Za-z0-9]{6}/.test(loc.pathname) || loc.pathname === '/scan';
+    /^\/chats\/\d+/.test(loc.pathname) || /^\/(booth|chill|uno|chipboom|guess)\/[A-Za-z0-9]{6}/.test(loc.pathname) || loc.pathname === '/scan';
   // The booth lives under Together now, so Together stays lit while you're setting one up.
   const togetherActive = /^\/(together|booth)(\/|$)/.test(loc.pathname);
   const chillCode = useChillRoom((s) => s.code);

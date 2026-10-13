@@ -121,7 +121,7 @@ export default function BoothRoom() {
       setState(ack.state);
       meshRef.current?.close();
       const { iceServers } = await api<{ iceServers: RTCIceServer[] }>('/rtc-config').catch(() => ({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }));
-      const mesh = new Mesh(code, s, iceServers, localRef.current, onStream);
+      const mesh = new Mesh((to, data) => s.emit('booth:signal', { code, to, data }), iceServers, localRef.current, onStream);
       meshRef.current = mesh;
       for (const p of (ack.state as BoothState).participants) if (p.userId !== me.id) mesh.connectTo(p.userId);
     };

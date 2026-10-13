@@ -211,3 +211,57 @@ export type LiveUno = {
   minBet: number;
   maxBet: number;
 };
+
+// ---------- Together: Chip or Boom ----------
+
+export type CbSide = 'blue' | 'pink';
+export type CbTile = 'chip' | 'bomb';
+export type CbSeat = { user: UnoPerson; ready: boolean; online: boolean; chips: number; lives: number; tiles: (CbTile | null)[] };
+export type CbEvent = { seq: number; type: 'reveal' | 'timeout' | 'forfeit' | 'win' | 'start'; by?: number; side?: CbSide; index?: number; tile?: CbTile; amount?: number };
+export type CbState = {
+  code: string;
+  hostId: number;
+  conversationId: number | null;
+  stake: number;
+  phase: 'lobby' | 'playing' | 'finished' | 'closed';
+  pot: number;
+  target: number;
+  lives: number;
+  blue: CbSeat | null;
+  pink: CbSeat | null;
+  turn: CbSide | null;
+  round: number;
+  turnEndsAt: number | null;
+  turnMs: number;
+  winnerId: number | null;
+  payout: number;
+  events: CbEvent[];
+  serverNow: number;
+};
+export type LiveChipBoom = { code: string; hostId: number; host: User | null; conversationId: number | null; phase: 'lobby' | 'playing'; players: UnoPerson[]; stake: number; pot: number };
+
+// ---------- Together: Guess the Number ----------
+
+export type GnHint = 'low' | 'high' | 'correct';
+export type GnGuess = { value: number; hint: GnHint; at: number };
+export type GnPlayer = { user: UnoPerson; ready: boolean; online: boolean; out: boolean; attempts: number; solvedAt: number | null; targetId: number | null; secret: number | null };
+export type GnEvent = { seq: number; type: 'guess' | 'solved' | 'forfeit' | 'win' | 'draw' | 'start'; by?: number; target?: number; value?: number; hint?: GnHint; amount?: number };
+export type GnState = {
+  code: string;
+  hostId: number;
+  conversationId: number | null;
+  stake: number;
+  max: number;
+  maxPlayers: number;
+  phase: 'lobby' | 'playing' | 'finished' | 'closed';
+  pot: number;
+  startsAt: number | null;
+  endsAt: number | null;
+  players: GnPlayer[];
+  winnerId: number | null;
+  payout: number;
+  events: GnEvent[];
+  you: { secret: number | null; guesses: GnGuess[]; onMine: GnGuess[] } | null;
+  serverNow: number;
+};
+export type LiveGuess = { code: string; hostId: number; host: User | null; conversationId: number | null; phase: 'lobby' | 'playing'; players: UnoPerson[]; stake: number; max: number; pot: number };

@@ -8,6 +8,8 @@ import helmet from 'helmet';
 import { requireAuth } from './auth.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
+import { recoverChipBoomTables } from './realtime/chipboom.js';
+import { recoverGuessTables } from './realtime/guess.js';
 import { recoverUnoTables } from './realtime/uno.js';
 import { purgeExpired } from './delivery.js';
 import { errorHandler } from './http.js';
@@ -17,6 +19,8 @@ import authRoutes from './routes/auth.js';
 import blockRoutes from './routes/blocks.js';
 import chillRoutes from './routes/chill.js';
 import unoRoutes from './routes/uno.js';
+import chipBoomRoutes from './routes/chipboom.js';
+import guessRoutes from './routes/guess.js';
 import coinRoutes from './routes/coins.js';
 import conversationRoutes from './routes/conversations.js';
 import friendRoutes from './routes/friends.js';
@@ -101,6 +105,8 @@ api.use('/conversations', requireAuth, conversationRoutes);
 api.use('/rooms', requireAuth, roomRoutes);
 api.use('/chill', requireAuth, chillRoutes);
 api.use('/uno', requireAuth, unoRoutes);
+api.use('/chipboom', requireAuth, chipBoomRoutes);
+api.use('/guess', requireAuth, guessRoutes);
 api.use('/photos', requireAuth, photoRoutes);
 api.use('/statuses', requireAuth, statusRoutes);
 api.use('/push', requireAuth, pushRoutes);
@@ -140,6 +146,8 @@ createRealtime(server, allowedOrigins);
 async function main() {
   await migrate();
   await recoverUnoTables().catch((e) => console.error('[uno] recovery failed', e.message));
+  await recoverChipBoomTables().catch((e) => console.error('[chipboom] recovery failed', e.message));
+  await recoverGuessTables().catch((e) => console.error('[guess] recovery failed', e.message));
   // Delivered messages are removed as devices confirm them; this catches anything past 30 days.
   const sweep = () => {
     purgeExpired().catch((e) => console.error('[delivery] sweep failed', e.message));

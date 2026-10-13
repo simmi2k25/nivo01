@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { Avatar } from '../../components/Avatar';
+import { CommentBubbles, CommentButton } from '../../components/GameComments';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { toast } from '../../components/Toast';
@@ -68,6 +69,7 @@ export default function UnoPage() {
     <div className="relative h-full overflow-hidden">
       {state && state.phase === 'lobby' && <Lobby state={state} seen={seen} onBack={back} />}
       {state && state.phase !== 'lobby' && <Table state={state} seen={seen} onBack={back} />}
+      {state && <TableComments lobby={state.phase === 'lobby'} />}
 
       {status !== 'live' && (
         <div className="chill-bg absolute inset-0 z-30 grid place-items-center p-8 text-center">
@@ -154,6 +156,7 @@ function Lobby({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
             <h1 className="truncate text-[22px] leading-tight font-bold">NivoTalk Cards</h1>
             <p className="text-[13px] font-bold tracking-widest text-muted">{state.code}</p>
           </div>
+          <CommentButton onSend={uno.say} />
           <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-ink shadow-sm" onClick={() => setInvite(true)} aria-label="Invite friends">
             <Icon name="userPlus" />
           </button>
@@ -257,6 +260,13 @@ function Lobby({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
       <LeaveSheet open={leave} onClose={() => setLeave(false)} onBack={onBack} lobby isHost={isHost} bet={myBet ?? 0} />
     </div>
   );
+}
+
+/** Comments float up the left side of the table (above the lobby's bottom bar, or beside the pile). */
+function TableComments({ lobby }: { lobby: boolean }) {
+  const me = useAuth((s) => s.user)!;
+  const comments = useUno((s) => s.comments);
+  return <CommentBubbles comments={comments} meId={me.id} className={lobby ? 'bottom-28 left-3 md:left-[104px]' : 'bottom-[42%] left-3 md:left-[104px]'} />;
 }
 
 function HowToPlay() {
@@ -621,6 +631,7 @@ function Table({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
               <span className="text-sm font-semibold text-white/60">pot</span>
             </span>
           </div>
+          <CommentButton onSend={uno.say} dark className="md:[&>button]:!h-10 md:[&>button]:!w-10" />
           {seated && playing ? (
             <div className="relative">
               <button className="grid h-10 w-10 place-items-center rounded-full bg-white/10 ring-1 ring-white/15 backdrop-blur" onClick={() => setEmotePicker((v) => !v)} aria-label="React">

@@ -1,5 +1,6 @@
 import type { Socket } from 'socket.io-client';
 import { create } from 'zustand';
+import { COMMENT_MS, type GameComment } from '../../components/GameComments';
 import { api } from '../../lib/api';
 import { getSocket, onSocket } from '../../lib/socket';
 import type { UnoCard, UnoColor, UnoState } from '../../lib/types';
@@ -15,9 +16,10 @@ type UnoStore = {
   /** serverClock − localClock. */
   offset: number;
   emotes: Emote[];
+  comments: GameComment[];
 };
 
-export const useUno = create<UnoStore>(() => ({ code: null, status: 'joining', error: null, state: null, offset: 0, emotes: [] }));
+export const useUno = create<UnoStore>(() => ({ code: null, status: 'joining', error: null, state: null, offset: 0, emotes: [], comments: [] }));
 
 const set = useUno.setState;
 const get = useUno.getState;
@@ -60,16 +62,24 @@ const onEmote = (p: { code: string; userId: number; emoji: string }) => {
   setTimeout(() => set((x) => ({ emotes: x.emotes.filter((y) => y.id !== e.id) })), 2200);
 };
 
+const onSay = (p: GameComment & { code: string }) => {
+  if (p.code !== get().code) return;
+  const c = { id: p.id, user: p.user, text: p.text };
+  set((x) => ({ comments: [...x.comments, c].slice(-8) }));
+  setTimeout(() => set((x) => ({ comments: x.comments.filter((y) => y.id !== c.id) })), COMMENT_MS);
+};
+
 let unsub: (() => void) | null = null;
 
 export function joinUno(code: string) {
   leaveUno();
-  set({ code, status: 'joining', error: null, state: null, emotes: [] });
+  set({ code, status: 'joining', error: null, state: null, emotes: [], comments: [] });
   let joinedOn: Socket | null = null;
   const off = onSocket((s) => {
     s.off('uno:state', onState).on('uno:state', onState);
     s.off('uno:closed', onClosed).on('uno:closed', onClosed);
     s.off('uno:emote', onEmote).on('uno:emote', onEmote);
+    s.off('uno:say', onSay).on('uno:say', onSay);
     // A dropped connection stops watching on the server: join again each time it comes back.
     joinedOn?.off('connect', join);
     joinedOn = s;
@@ -93,14 +103,14 @@ export function joinUno(code: string) {
     joinedOn?.off('connect', join);
     const s = getSocket();
     s?.emit('uno:unwatch', { code });
-    s?.off('uno:state', onState).off('uno:closed', onClosed).off('uno:emote', onEmote);
+    s?.off('uno:state', onState).off('uno:closed', onClosed).off('uno:emote', onEmote).off('uno:say', onSay);
   };
 }
 
 export function leaveUno() {
   unsub?.();
   unsub = null;
-  set({ code: null, state: null, emotes: [] });
+  set({ code: null, state: null, emotes: [], comments: [] });
 }
 
 // ---------- actions ----------
@@ -125,6 +135,7 @@ export const uno = {
   callUno: () => move('uno:uno'),
   catchUno: () => move('uno:catch'),
   emote: (emoji: string) => getSocket()?.emit('uno:emote', { code: get().code, emoji }),
+  say: (text: string) => getSocket()?.emit('uno:say', { code: get().code, text }),
   sit: (bet: number) => api(`/uno/${get().code}/sit`, { body: { bet } }),
   leave: () => api(`/uno/${get().code}/leave`, { body: {} }),
 };

@@ -98,6 +98,7 @@ button:disabled {
 }
 /* Rounded fields draw their own focus ring around the whole pill. */
 .chill-compose input:focus-visible,
+.game-compose input:focus-visible,
 .field input:focus-visible {
   outline: none;
 }
@@ -647,3 +648,121 @@ textarea {
   border: 3px solid #fff; box-shadow: 0 3px 10px rgba(90, 70, 0, 0.35);
 }
 .uno-range input[type='range']:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--primary-soft), 0 3px 10px rgba(90, 70, 0, 0.35); }
+
+/* ---------- Chip or Boom ---------- */
+.cb-blue {
+  --cb-card: #e6eeff;
+  --cb-ring: #93b5f1;
+  --cb-tile-a: #d4e3ff;
+  --cb-tile-b: #afc9f6;
+  --cb-tile-edge: #8badea;
+  --cb-ink: #2b5aa6;
+  --cb-q: #7c9ed8;
+  --cb-solid: linear-gradient(180deg, #5b92ea, #3c6fd4);
+  --cb-glow: rgba(70, 120, 220, 0.35);
+}
+.cb-pink {
+  --cb-card: #ffe7ee;
+  --cb-ring: #f0a4bb;
+  --cb-tile-a: #fcd4e0;
+  --cb-tile-b: #f4b2c6;
+  --cb-tile-edge: #e292aa;
+  --cb-ink: #b3315e;
+  --cb-q: #d47d9b;
+  --cb-solid: linear-gradient(180deg, #f07ba2, #d6527d);
+  --cb-glow: rgba(214, 82, 125, 0.32);
+}
+:root[data-theme='dark'] .cb-blue {
+  --cb-card: #1c2748;
+  --cb-ring: #4f74c4;
+  --cb-tile-a: #3a5694;
+  --cb-tile-b: #2f467c;
+  --cb-tile-edge: #213563;
+  --cb-ink: #a9c4ff;
+  --cb-q: #8fabea;
+}
+:root[data-theme='dark'] .cb-pink {
+  --cb-card: #361f30;
+  --cb-ring: #b65a7d;
+  --cb-tile-a: #7a3c58;
+  --cb-tile-b: #642f49;
+  --cb-tile-edge: #4b2236;
+  --cb-ink: #ffb3cb;
+  --cb-q: #e590ae;
+}
+.cb-card { background: var(--cb-card); }
+.cb-ink { color: var(--cb-ink); }
+.cb-solid { background: var(--cb-solid); }
+.cb-tile {
+  position: relative;
+  border-radius: 20%;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.25s, filter 0.25s;
+}
+.cb-tile-hidden {
+  background: linear-gradient(180deg, var(--cb-tile-a), var(--cb-tile-b));
+  box-shadow: inset 0 -5px 0 var(--cb-tile-edge), inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 4px 10px rgba(60, 80, 160, 0.1);
+  color: var(--cb-q);
+}
+.cb-tile-chip {
+  background: #fff;
+  box-shadow: inset 0 -4px 0 #eef0f8, 0 6px 14px rgba(60, 80, 160, 0.12);
+}
+.cb-tile-bomb {
+  background: #ece8f8;
+  box-shadow: inset 0 -4px 0 #ddd6f0, 0 4px 10px rgba(60, 80, 160, 0.1);
+}
+:root[data-theme='dark'] .cb-tile-chip { background: #f6f3ea; box-shadow: inset 0 -4px 0 #d9d3c2; }
+:root[data-theme='dark'] .cb-tile-bomb { background: #2c2840; box-shadow: inset 0 -4px 0 #1f1b30; }
+button.cb-tile-hidden:not(:disabled) { cursor: pointer; }
+@media (hover: hover) {
+  button.cb-tile-hidden:not(:disabled):hover { transform: translateY(-3px); filter: brightness(1.04); }
+}
+button.cb-tile-hidden:not(:disabled):active { transform: translateY(1px) scale(0.96); }
+/* Tapped and on its way to the server: the tile sinks and breathes until the answer flips it. */
+.cb-tile-pending { animation: cb-pending 0.7s ease-in-out infinite; outline: 3px solid var(--cb-ring); outline-offset: 2px; }
+@keyframes cb-pending { 50% { transform: scale(0.93); filter: brightness(1.08); } }
+.cb-flip { animation: cb-flip 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes cb-flip {
+  0% { transform: perspective(500px) rotateY(90deg) scale(0.9); }
+  60% { transform: perspective(500px) rotateY(-10deg) scale(1.06); }
+  100% { transform: none; }
+}
+.cb-pop { animation: cb-pop 0.5s 0.12s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+@keyframes cb-pop { from { transform: scale(0.3); opacity: 0; } to { transform: none; opacity: 1; } }
+.cb-shake { animation: cb-shake 0.5s ease both; }
+@keyframes cb-shake {
+  15%, 55% { transform: translateX(-7px) rotate(-0.6deg); }
+  35%, 75% { transform: translateX(7px) rotate(0.6deg); }
+  90% { transform: translateX(-2px); }
+}
+.cb-boom-flash { animation: cb-boom-flash 0.7s ease-out both; }
+@keyframes cb-boom-flash { from { opacity: 0.55; } to { opacity: 0; } }
+.cb-plus { animation: cb-plus 1s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes cb-plus { 0% { opacity: 0; transform: translateY(6px) scale(0.7); } 25% { opacity: 1; transform: translateY(-6px) scale(1.1); } 100% { opacity: 0; transform: translateY(-34px) scale(1); } }
+.cb-heart-lost { animation: cb-heart-lost 0.6s ease both; }
+@keyframes cb-heart-lost { 40% { transform: scale(1.4); } 100% { transform: scale(1); } }
+.cb-float { animation: cb-float 2.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes cb-float { 0% { opacity: 0; transform: translateY(20px) scale(0.6); } 15% { opacity: 1; transform: translateY(0) scale(1.1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-160px) scale(0.9); } }
+.cb-turn-glow { box-shadow: 0 0 0 3px var(--cb-ring), 0 18px 40px var(--cb-glow); }
+.cb-ring-track { transition: stroke-dashoffset 0.25s linear; }
+@media (prefers-reduced-motion: reduce) {
+  .cb-flip, .cb-pop, .cb-shake, .cb-plus, .cb-float, .cb-tile-pending, .cb-heart-lost { animation-duration: 0.01s; }
+}
+
+/* ---------- game comments: bubble up, hold, then drift off ---------- */
+.game-comment { animation: game-comment 10s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes game-comment {
+  0% { opacity: 0; transform: translateY(18px) scale(0.85); }
+  4% { opacity: 1; transform: translateY(-2px) scale(1.03); }
+  7% { transform: none; }
+  88% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-14px) scale(0.96); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes game-comment { 0%, 92% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* ---------- voice chat: a soft pulse round the mic while it's live ---------- */
+.voice-ring { animation: voice-ring 1.6s ease-out infinite; box-shadow: 0 0 0 0 rgba(47, 191, 113, 0.55); }
+@keyframes voice-ring { 70% { box-shadow: 0 0 0 10px rgba(47, 191, 113, 0); } 100% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); } }
+@media (prefers-reduced-motion: reduce) { .voice-ring { animation: none; } }

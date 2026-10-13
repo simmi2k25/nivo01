@@ -579,6 +579,16 @@ function MessageRow({
               Play
             </Link>
           )}
+          {m.meta?.event === 'guess' && typeof m.meta.code === 'string' && (
+            <Link to={`/guess/${m.meta.code}`} className="-mr-1.5 rounded-full bg-[#fff1cf] px-2.5 py-0.5 font-bold text-[#a35f00] dark:bg-[#3a2f12] dark:text-[#ffd36b]">
+              Play
+            </Link>
+          )}
+          {m.meta?.event === 'chipboom' && typeof m.meta.code === 'string' && (
+            <Link to={`/chipboom/${m.meta.code}`} className="-mr-1.5 rounded-full bg-[#ffe3ec] px-2.5 py-0.5 font-bold text-[#b4325f] dark:bg-[#3a2132] dark:text-[#ff9dbd]">
+              Play
+            </Link>
+          )}
         </span>
       </div>
     );

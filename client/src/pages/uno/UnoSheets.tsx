@@ -31,7 +31,7 @@ export function Coin({ size = 22, className = '' }: { size?: number; className?:
 }
 
 /** One slider with a gold thumb. */
-function BetSlider({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
+export function BetSlider({ value, min, max, onChange, label }: { value: number; min: number; max: number; onChange: (n: number) => void; label: string }) {
   const p = pct(value, min, max);
   return (
     <div className="uno-range">
@@ -73,7 +73,7 @@ function Chips({ options, value, onPick }: { options: { label: string; value: nu
   );
 }
 
-function BigAmount({ n, caption }: { n: number; caption: ReactNode }) {
+export function BigAmount({ n, caption }: { n: number; caption: ReactNode }) {
   return (
     <div className="flex items-center justify-center gap-3 py-1">
       <Coin size={40} />
@@ -85,7 +85,7 @@ function BigAmount({ n, caption }: { n: number; caption: ReactNode }) {
   );
 }
 
-function Balance({ need }: { need: number }) {
+export function Balance({ need }: { need: number }) {
   const coins = useCoins((s) => s.coins);
   const openStore = useCoins((s) => s.openStore);
   const short = coins < need;
