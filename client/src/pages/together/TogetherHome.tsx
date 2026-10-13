@@ -15,7 +15,6 @@ import { useTogether } from '../../stores/together';
 import { GroupAvatar } from '../Chats';
 import { UnoCardFace } from '../uno/UnoCard';
 import { CreateTableSheet } from '../uno/UnoSheets';
-import { BombArt } from '../chipboom/art';
 import { CreateChipBoomSheet } from '../chipboom/CbSheets';
 import { CreateGuessSheet } from '../guess/GnSheets';
 import { CoverArt, LiveBars } from './parts';
@@ -55,36 +54,32 @@ export default function TogetherHome() {
         {/* The four activities share one card colour; only their buttons carry each one's accent. */}
         <div className="mt-4 grid gap-4 md:mt-5 md:grid-cols-2 md:gap-5">
           <ActivityRow
-            art={<Icon name="camera" size={28} />}
+            art={<ActivityIcon name="booth" />}
             title="Photobooth"
             text={['One strip, up to 4 friends', 'Snap one strip together, up to 4 friends']}
             cta={['Start', 'Start a booth']}
             onClick={() => nav('/booth')}
-            iconClass="bg-primary-soft text-primary-strong"
           />
           <ActivityRow
-            art={<Icon name="music" size={28} />}
+            art={<ActivityIcon name="music" />}
             title="Chill Room"
             text={['Songs in sync, chat together', 'Listen to full songs in sync and chat']}
             cta={['Open', 'Open a room']}
             onClick={() => setOpening(true)}
-            iconClass="bg-[#dce9ff] text-[#2f6fd6] dark:bg-primary-soft dark:text-primary-strong"
           />
           <ActivityRow
-            art={<BombArt size={34} />}
+            art={<ActivityIcon name="bomb" />}
             title="Chip or Boom"
             text={['Find chips, dodge bombs', 'Blue grid vs pink grid. Find chips, dodge bombs']}
             cta={['Play', 'Play now']}
             onClick={() => setChipping(true)}
-            iconClass="bg-gradient-to-br from-[#e6eeff] to-[#ffe7ee] dark:from-[#1c2748] dark:to-[#361f30]"
           />
           <ActivityRow
-            art={<span className="font-display text-[30px] leading-none font-bold">?</span>}
+            art={<ActivityIcon name="guess" />}
             title="Guess the number"
             text={['Crack your friend’s number', 'Crack your friend’s secret number first']}
             cta={['Play', 'Play now']}
             onClick={() => setGuessing(true)}
-            iconClass="bg-[#fff1cf] text-[#b26b00] dark:bg-[#3a2f12] dark:text-[#ffd36b]"
           />
         </div>
 
@@ -235,12 +230,11 @@ function ActivityRow(p: {
   text: [string, string];
   cta: [string, string];
   onClick: () => void;
-  iconClass: string;
   disabled?: boolean;
 }) {
   return (
     <section className="anim-rise flex items-center gap-4 rounded-[28px] bg-surface p-4 shadow-[var(--shadow-sm)] md:gap-5 md:p-6">
-      <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-[20px] md:h-[68px] md:w-[68px] ${p.iconClass}`}>{p.art}</span>
+      <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[20px] bg-primary-soft text-primary-strong md:h-[68px] md:w-[68px]">{p.art}</span>
       <span className="min-w-0 flex-1">
         <span className="block font-display text-[22px] leading-tight font-bold md:text-[26px]">{p.title}</span>
         <span className="block leading-snug text-muted">
@@ -258,6 +252,21 @@ function ActivityRow(p: {
         <span className="hidden md:inline">{p.cta[1]}</span>
       </button>
     </section>
+  );
+}
+
+/**
+ * The activity line icons (public/games/icons) used as masks, so they're painted in the theme colour
+ * and follow dark mode without changing the drawings.
+ */
+function ActivityIcon({ name }: { name: 'bomb' | 'music' | 'booth' | 'guess' }) {
+  const url = `url(/games/icons/${name}.png)`;
+  return (
+    <span
+      className="block h-9 w-9 md:h-11 md:w-11"
+      style={{ backgroundColor: 'currentColor', WebkitMaskImage: url, maskImage: url, WebkitMaskSize: 'contain', maskSize: 'contain', WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat', WebkitMaskPosition: 'center', maskPosition: 'center' }}
+      aria-hidden="true"
+    />
   );
 }
 
