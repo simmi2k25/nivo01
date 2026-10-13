@@ -55,6 +55,9 @@ export function ChatRoom({ conversationId }: { conversationId: number }) {
       .catch(() => setMissing(true));
   }, [loaded, conv, conversationId, upsertConversation]);
 
+  /** Set by the message list: jumps to the newest message (used when the message box is tapped). */
+  const toBottom = useRef<(() => void) | null>(null);
+
   if (missing) {
     return (
       <div className="grid h-full place-items-center p-8 text-center">
@@ -82,8 +85,9 @@ export function ChatRoom({ conversationId }: { conversationId: number }) {
         loaded={!!thread?.loaded}
         canWrite={!conv.block}
         onDraft={setDraft}
+        toBottom={toBottom}
       />
-      {conv.block ? <BlockedBar conv={conv} me={me} /> : <Composer conv={conv} me={me} draft={draft} onDraft={setDraft} />}
+      {conv.block ? <BlockedBar conv={conv} me={me} /> : <Composer conv={conv} me={me} draft={draft} onDraft={setDraft} onFocus={() => toBottom.current?.()} />}
     </div>
   );
 }
@@ -358,6 +362,7 @@ function MessageList({
   loaded,
   canWrite,
   onDraft,
+  toBottom,
 }: {
   conv: Conversation;
   me: User;
@@ -367,6 +372,7 @@ function MessageList({
   loaded: boolean;
   canWrite: boolean;
   onDraft: (d: Draft) => void;
+  toBottom: React.RefObject<(() => void) | null>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const prevLast = useRef<number | string | undefined>(undefined);
@@ -399,6 +405,31 @@ function MessageList({
     prevFirst.current = first;
     prevHeight.current = el.scrollHeight;
   }, [items]);
+
+  // When the keyboard opens (or the message box grows) the list gets shorter: keep the newest messages in
+  // view right above it, instead of leaving them hidden underneath.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let h = el.clientHeight;
+    const ro = new ResizeObserver(() => {
+      const nh = el.clientHeight;
+      if (nh === h) return;
+      if (nearBottom.current) el.scrollTop = el.scrollHeight;
+      else if (nh < h) el.scrollTop += h - nh; // keep whatever was at the bottom edge on screen
+      h = nh;
+    });
+    ro.observe(el);
+    toBottom.current = () => {
+      nearBottom.current = true;
+      setNewBelow(false);
+      el.scrollTop = el.scrollHeight;
+    };
+    return () => {
+      ro.disconnect();
+      toBottom.current = null;
+    };
+  }, [toBottom]);
 
   function onScroll() {
     const el = ref.current!;
@@ -949,7 +980,7 @@ function BlockedBar({ conv, me }: { conv: Conversation; me: User }) {
   );
 }
 
-function Composer({ conv, me, draft, onDraft }: { conv: Conversation; me: User; draft: Draft; onDraft: (d: Draft) => void }) {
+function Composer({ conv, me, draft, onDraft, onFocus }: { conv: Conversation; me: User; draft: Draft; onDraft: (d: Draft) => void; onFocus?: () => void }) {
   const send = useChat((s) => s.send);
   const editMessage = useChat((s) => s.editMessage);
   const [text, setText] = useState('');
@@ -1041,7 +1072,10 @@ function Composer({ conv, me, draft, onDraft }: { conv: Conversation; me: User; 
             sendTyping(conv.id, e.target.value.length > 0);
           }}
           onKeyDown={onKey}
-          onFocus={() => setStickers(false)}
+          onFocus={() => {
+            setStickers(false);
+            onFocus?.();
+          }}
           className="scroll-thin min-h-[42px] flex-1 resize-none rounded-[22px] bg-surface-2 px-4 py-2.5 text-[15px] leading-snug outline-none focus:ring-2 focus:ring-primary-soft"
         />
         <button
