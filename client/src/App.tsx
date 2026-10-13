@@ -14,6 +14,7 @@ import { useChat } from './stores/chat';
 import { startNews } from './stores/news';
 import { startStatuses } from './stores/status';
 import { startTogether } from './stores/together';
+import { leaveChill } from './pages/together/chillStore';
 
 // Heavy photobooth code (camera, WebRTC, strip editor) loads only when opened.
 const BoothHome = lazy(() => import('./pages/booth/BoothHome'));
@@ -53,6 +54,7 @@ export function App() {
       offNews();
       offStatuses();
       offTogether();
+      leaveChill();
     };
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

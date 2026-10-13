@@ -97,6 +97,7 @@ button:disabled {
   outline-offset: 2px;
 }
 /* Rounded fields draw their own focus ring around the whole pill. */
+.chill-compose input:focus-visible,
 .field input:focus-visible {
   outline: none;
 }
@@ -117,6 +118,10 @@ textarea {
 }
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
+}
+/* The Chill Room mini bar already clears the status bar for the screen under it. */
+.chill-docked .chill-page .safe-top {
+  padding-top: 0;
 }
 
 /* ---------- shared components ---------- */
@@ -459,6 +464,25 @@ textarea {
     rotate(calc(var(--o) * 2deg));
   transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s;
 }
+@media (max-width: 1023px) {
+  .chill-stage {
+    --H: clamp(150px, 24dvh, 220px);
+  }
+}
+/* Little equaliser bars on the mini player while a song plays. */
+.chill-eq {
+  transform-origin: bottom;
+  animation: chill-eq 0.9s ease-in-out infinite;
+}
+@keyframes chill-eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
 .chill-card:not(.chill-front) {
   opacity: calc(1 - var(--a) * 0.12);
 }
@@ -595,6 +619,9 @@ textarea {
   100% { transform: translateX(240%) skewX(-18deg); }
 }
 .uno-shake { animation: uno-shake 0.42s ease both; }
+/* Cards in my hand glide (never jump) when one is played, drawn or lifts on my turn. */
+.uno-hand-card { transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1); will-change: transform; }
+@media (prefers-reduced-motion: reduce) { .uno-hand-card { transition-duration: 0.01s; } }
 .uno-glow { animation: uno-glow 1.4s ease-in-out infinite; }
 .uno-ring-cw { animation: uno-ring 9s linear infinite; }
 .uno-ring-ccw { animation: uno-ring 9s linear infinite reverse; }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Avatar } from '../../components/Avatar';
 import { CoinButton } from '../../components/CoinStore';
 import { Icon, type IconName } from '../../components/Icon';
+import { PrivateToggle } from '../../components/PrivateToggle';
 import { Sheet } from '../../components/Sheet';
 import { toast } from '../../components/Toast';
 import { api, errorText } from '../../lib/api';
@@ -307,11 +308,12 @@ export function OpenRoomSheet({ open, onClose, conversationId }: { open: boolean
   const me = useAuth((s) => s.user)!;
   const conversations = useChat((s) => s.conversations);
   const [busy, setBusy] = useState<number | 'solo' | null>(null);
+  const [isPrivate, setPrivate] = useState(false);
 
   async function start(cid?: number) {
     setBusy(cid ?? 'solo');
     try {
-      const { room } = await api<{ room: { code: string } }>('/chill', { body: cid ? { conversationId: cid } : {} });
+      const { room } = await api<{ room: { code: string } }>('/chill', { body: { ...(cid ? { conversationId: cid } : {}), private: isPrivate } });
       onClose();
       nav(`/chill/${room.code}`);
     } catch (e) {
@@ -326,6 +328,9 @@ export function OpenRoomSheet({ open, onClose, conversationId }: { open: boolean
   return (
     <Sheet open={open} onClose={onClose} title="Open a Chill Room">
       <p className="text-sm text-muted">Pick a chat and everyone in it gets an invite. Songs play in full, in sync, for the whole room.</p>
+      <div className="mt-3">
+        <PrivateToggle on={isPrivate} onChange={setPrivate} />
+      </div>
       <div className="mt-3 grid gap-0.5">
         {sorted.map((c) => (
           <div key={c.id} className="flex items-center gap-3 rounded-2xl px-1 py-1.5 hover:bg-surface-2">

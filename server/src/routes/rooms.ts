@@ -29,6 +29,7 @@ export type RoomRow = {
   shots: number;
   countdown: number;
   status: 'open' | 'closed';
+  private: boolean;
   created_at: Date;
   expires_at: Date;
 };
@@ -45,6 +46,7 @@ async function serializeRoom(r: RoomRow) {
     conversationId: r.conversation_id,
     shots: r.shots,
     countdown: r.countdown,
+    private: r.private,
     status: r.status,
     createdAt: r.created_at,
     expiresAt: r.expires_at,
@@ -69,15 +71,16 @@ router.post('/', async (req, res) => {
       shots: z.number().int().min(1).max(6).default(4),
       countdown: z.number().int().min(1).max(10).default(3),
       conversationId: idParam.optional(),
+      private: z.boolean().default(false),
     }),
     req.body,
   );
   let room: RoomRow | undefined;
   for (let i = 0; i < 5 && !room; i++) {
     room = await one<RoomRow>(
-      `INSERT INTO booth_rooms (code, host_id, conversation_id, shots, countdown)
-       VALUES ($1, $2, $3, $4, $5) ON CONFLICT (code) DO NOTHING RETURNING *`,
-      [newCode(), req.userId, body.conversationId ?? null, body.shots, body.countdown],
+      `INSERT INTO booth_rooms (code, host_id, conversation_id, shots, countdown, private)
+       VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (code) DO NOTHING RETURNING *`,
+      [newCode(), req.userId, body.conversationId ?? null, body.shots, body.countdown, body.private],
     );
   }
   if (!room) throw fail(500, 'Couldn’t create a room — try again');

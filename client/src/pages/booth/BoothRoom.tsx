@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import type { Socket } from 'socket.io-client';
 import { Avatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
+import { PrivateToggle } from '../../components/PrivateToggle';
 import { Loader } from '../../components/Loader';
 import { Sheet } from '../../components/Sheet';
 import { toast } from '../../components/Toast';
@@ -24,6 +25,8 @@ import { StripEditor } from './StripEditor';
 type BoothState = {
   code: string;
   hostId: number;
+  /** Hidden from friends' "Live now". */
+  private?: boolean;
   controllerId: number | null;
   shots: number;
   countdown: number;
@@ -326,6 +329,11 @@ export default function BoothRoom() {
           <p className="font-display leading-tight font-semibold">Photobooth</p>
           <p className="text-xs opacity-75">
             Code <b className="tracking-widest">{code}</b> · {n}/4 here
+            {state.private && (
+              <span className="ml-1.5 inline-flex items-center gap-0.5 rounded-full bg-white/15 px-1.5 align-middle text-[11px] font-bold">
+                <Icon name="lock" size={11} /> Private
+              </span>
+            )}
           </p>
         </div>
         <button className="btn btn-sm !h-9 bg-white/15 text-white" onClick={() => setInvite(true)}>
@@ -438,7 +446,13 @@ export default function BoothRoom() {
         )}
       </div>
 
-      <InviteSheet open={invite} onClose={() => setInvite(false)} code={code} />
+      <InviteSheet
+        open={invite}
+        onClose={() => setInvite(false)}
+        code={code}
+        isPrivate={!!state.private}
+        onPrivate={isHost ? (v) => socket?.emit('booth:privacy', { code, private: v }) : undefined}
+      />
     </div>
   );
 }
@@ -469,7 +483,20 @@ function VideoTile({ user, stream, mine, mirror, videoRef, host }: { user: User;
   );
 }
 
-function InviteSheet({ open, onClose, code }: { open: boolean; onClose: () => void; code: string }) {
+function InviteSheet({
+  open,
+  onClose,
+  code,
+  isPrivate,
+  onPrivate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  code: string;
+  isPrivate: boolean;
+  /** Only the host can change it. */
+  onPrivate?: (v: boolean) => void;
+}) {
   const me = useAuth((s) => s.user)!;
   const conversations = useChat((s) => s.conversations);
   const [sent, setSent] = useState<number[]>([]);
@@ -479,6 +506,17 @@ function InviteSheet({ open, onClose, code }: { open: boolean; onClose: () => vo
 
   return (
     <Sheet open={open} onClose={onClose} title="Invite to the booth">
+      {onPrivate ? (
+        <div className="mb-3">
+          <PrivateToggle on={isPrivate} onChange={onPrivate} />
+        </div>
+      ) : (
+        isPrivate && (
+          <p className="mb-3 flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm font-semibold text-muted">
+            <Icon name="lock" size={16} /> This booth is private — friends don’t see it live
+          </p>
+        )
+      )}
       <div className="rounded-2xl bg-primary-soft p-4 text-center">
         <p className="text-xs font-bold tracking-wide text-muted uppercase">Room code</p>
         <p className="font-display text-4xl font-bold tracking-[0.2em] text-primary-strong">{code}</p>

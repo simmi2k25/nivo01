@@ -117,6 +117,8 @@ export type ChillState = {
   code: string;
   hostId: number;
   conversationId: number | null;
+  /** Hidden from friends' "Live now". */
+  private?: boolean;
   queue: ChillItem[];
   index: number;
   playing: boolean;

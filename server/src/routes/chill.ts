@@ -22,6 +22,7 @@ async function serialize(r: ChillRow) {
     hostId: r.host_id,
     host: await getUser(r.host_id),
     conversationId: r.conversation_id,
+    private: r.private,
     status: r.status === 'open' && new Date(r.expires_at) > new Date() ? 'open' : 'closed',
     listeners: live?.listeners ?? [],
     nowPlaying: live?.nowPlaying ?? null,
@@ -53,7 +54,7 @@ async function announce(room: ChillRow, conversationId: number, userId: number, 
 }
 
 router.post('/', async (req, res) => {
-  const body = parse(z.object({ conversationId: idParam.optional() }), req.body ?? {});
+  const body = parse(z.object({ conversationId: idParam.optional(), private: z.boolean().default(false) }), req.body ?? {});
   if (body.conversationId && !(await isMember(body.conversationId, req.userId))) throw fail(404, 'Chat not found');
   // One open room per chat: starting again from the same chat takes you to the one already going.
   if (body.conversationId) {
@@ -66,8 +67,8 @@ router.post('/', async (req, res) => {
   let room: ChillRow | undefined;
   for (let i = 0; i < 5 && !room; i++) {
     room = await one<ChillRow>(
-      `INSERT INTO chill_rooms (code, host_id, conversation_id) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING RETURNING *`,
-      [newCode(), req.userId, body.conversationId ?? null],
+      `INSERT INTO chill_rooms (code, host_id, conversation_id, private) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING *`,
+      [newCode(), req.userId, body.conversationId ?? null, body.private],
     );
   }
   if (!room) throw fail(500, 'Couldn’t open a room — try again');
@@ -85,13 +86,14 @@ router.get('/live', async (req, res) => {
   const chats = await query<{ id: number }>('SELECT conversation_id AS id FROM conversation_members WHERE user_id = $1', [me]);
   const friendIds = new Set(friends.rows.map((r) => r.id));
   const chatIds = new Set(chats.rows.map((r) => r.id));
-  const visible = (hostId: number, conversationId: number | null, people: number[]) =>
+  // A private room shows only to its host and the people already inside — not to friends or the linked chat.
+  const visible = (hostId: number, conversationId: number | null, people: number[], isPrivate = false) =>
     hostId === me ||
     people.includes(me) ||
-    (conversationId ? chatIds.has(conversationId) : friendIds.has(hostId) || people.some((id) => friendIds.has(id)));
+    (!isPrivate && (conversationId ? chatIds.has(conversationId) : friendIds.has(hostId) || people.some((id) => friendIds.has(id))));
 
-  const rooms = liveChillRooms().filter((r) => visible(r.hostId, r.conversationId, r.listeners.map((l) => l.id)));
-  const booths = liveBooths().filter((b) => visible(b.hostId, b.conversationId, b.participants.map((p) => p.userId)));
+  const rooms = liveChillRooms().filter((r) => visible(r.hostId, r.conversationId, r.listeners.map((l) => l.id), r.private));
+  const booths = liveBooths().filter((b) => visible(b.hostId, b.conversationId, b.participants.map((p) => p.userId), b.private));
   const games = liveUnoTables().filter((g) => visible(g.hostId, g.conversationId, g.players.map((p) => p.id)));
   const hosts = new Map<number, Awaited<ReturnType<typeof getUser>>>();
   for (const id of new Set([...rooms.map((r) => r.hostId), ...booths.map((b) => b.hostId), ...games.map((g) => g.hostId)])) hosts.set(id, await getUser(id));

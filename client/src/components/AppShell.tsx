@@ -1,4 +1,6 @@
+import { lazy, Suspense } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
+import { useChillRoom } from '../pages/together/chillStore';
 import { useAuth } from '../stores/auth';
 import { useChat } from '../stores/chat';
 import { Avatar } from './Avatar';
@@ -6,6 +8,9 @@ import { CoinStore } from './CoinStore';
 import { Icon, type IconName } from './Icon';
 import { NewsSheet } from './News';
 import { StatusComposer, StatusViewer } from './Status';
+
+// Keeps a Chill Room's music going (and shows its mini bar) while you're elsewhere in the app.
+const ChillDock = lazy(() => import('../pages/together/ChillDock'));
 
 const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: '/friends', label: 'Friends', icon: 'users' },
@@ -23,6 +28,9 @@ export function AppShell() {
     /^\/chats\/\d+/.test(loc.pathname) || /^\/(booth|chill|uno)\/[A-Za-z0-9]{6}/.test(loc.pathname) || loc.pathname === '/scan';
   // The booth lives under Together now, so Together stays lit while you're setting one up.
   const togetherActive = /^\/(together|booth)(\/|$)/.test(loc.pathname);
+  const chillCode = useChillRoom((s) => s.code);
+  const inChillRoom = !!chillCode && loc.pathname.toUpperCase() === `/CHILL/${chillCode}`;
+  const chillBar = !!chillCode && !inChillRoom;
 
   return (
     <div className="flex h-dvh w-full overflow-hidden">
@@ -50,8 +58,15 @@ export function AppShell() {
         </NavLink>
       </nav>
 
-      <main className="relative min-w-0 flex-1">
-        <Outlet />
+      <main className={`relative flex min-w-0 flex-1 flex-col ${chillBar ? 'chill-docked' : ''}`}>
+        {chillCode && (
+          <Suspense fallback={null}>
+            <ChillDock showBar={chillBar} />
+          </Suspense>
+        )}
+        <div className="chill-page relative min-h-0 flex-1">
+          <Outlet />
+        </div>
       </main>
       <CoinStore />
       <NewsSheet />

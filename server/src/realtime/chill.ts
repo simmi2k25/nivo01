@@ -47,6 +47,7 @@ export type ChillRow = {
   host_id: number;
   conversation_id: number | null;
   status: 'open' | 'closed';
+  private: boolean;
   data: Partial<Saved>;
   created_at: Date;
   expires_at: Date;
@@ -58,6 +59,8 @@ type Session = Saved & {
   code: string;
   hostId: number;
   conversationId: number | null;
+  /** Hidden from friends' "Live now"; people still get in by link or invite. */
+  isPrivate: boolean;
   /** Server clock (ms) when positionMs was true. */
   anchorAt: number;
   listeners: Map<string, Listener>;
@@ -90,6 +93,7 @@ function stateOf(s: Session) {
     code: s.code,
     hostId: s.hostId,
     conversationId: s.conversationId,
+    private: s.isPrivate,
     queue: s.queue,
     index: s.index,
     playing: s.playing,
@@ -206,6 +210,7 @@ export function liveChillRooms() {
         code: s.code,
         hostId: s.hostId,
         conversationId: s.conversationId,
+        private: s.isPrivate,
         listeners: uniqueListeners(s).map((l) => l.user),
         nowPlaying: item && !s.finished ? { title: item.title, artist: item.artist, artwork: item.artwork, playing: s.playing } : null,
       };
@@ -230,6 +235,7 @@ function sessionFromRow(row: ChillRow): Session {
     code: row.code,
     hostId: row.host_id,
     conversationId: row.conversation_id,
+    isPrivate: !!row.private,
     queue,
     index: Math.min(Math.max(0, d.index ?? 0), Math.max(0, queue.length - 1)),
     // Everyone left (or the server restarted): pick up where it was, paused.
@@ -454,6 +460,18 @@ export function attachChill(socket: Socket) {
     if (i <= s.index || (s.queue[i].addedBy !== userId && s.hostId !== userId)) return;
     s.queue.splice(i, 1);
     broadcast(s);
+  });
+
+  // Only the host decides whether the room shows up for friends.
+  socket.on('chill:privacy', (payload: { code?: string; private?: boolean }) => {
+    const s = sessionFor(payload?.code);
+    if (!s || s.hostId !== userId || typeof payload.private !== 'boolean' || payload.private === s.isPrivate) return;
+    s.isPrivate = payload.private;
+    const me = nameOf(s);
+    say(s, { kind: 'event', user: me ? person(me) : null, text: s.isPrivate ? 'made the room private' : 'made the room visible to friends' });
+    broadcast(s);
+    notifyTogether(s.hostId, s.conversationId);
+    query('UPDATE chill_rooms SET private = $2 WHERE code = $1', [s.code, s.isPrivate]).catch((e) => console.error('[chill] privacy save failed', e.message));
   });
 
   socket.on('chill:shuffle', (payload: { code?: string }) => {

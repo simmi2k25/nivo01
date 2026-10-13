@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import { Avatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
+import { PrivateToggle } from '../../components/PrivateToggle';
 import { Sheet } from '../../components/Sheet';
 import { toast } from '../../components/Toast';
 import { api, errorText } from '../../lib/api';
@@ -14,7 +15,7 @@ import { GroupAvatar } from '../Chats';
 import { chill, currentItem, joinChill, leaveChill, positionOf, useChillRoom } from './chillStore';
 import { AvatarStack, CoverArt, fmtTime } from './parts';
 import { SongsView } from './SongsView';
-import { useChillPlayer } from './useChillPlayer';
+import { useChillAudio, useDockedPlayer, type Yt } from './ChillDock';
 
 export default function ChillRoomPage() {
   const code = (useParams().code ?? '').toUpperCase();
@@ -25,15 +26,17 @@ export default function ChillRoomPage() {
   const state = useChillRoom((s) => s.state);
   const [view, setView] = useState<'room' | 'songs'>('room');
   const [people, setPeople] = useState(false);
-  const playerHost = useRef<HTMLDivElement>(null);
-  const yt = useChillPlayer(playerHost);
+  /** Phone keyboard is up for the room chat: fold the covers away so the conversation gets the room. */
+  const [typing, setTyping] = useState(false);
+  const { yt, slotRef } = useDockedPlayer();
 
+  // Joining sticks around after you leave this screen (the music keeps playing and a mini bar brings you
+  // back); you leave the room on purpose, from the mini bar or the people sheet.
   useEffect(() => {
-    joinChill(code);
-    return () => leaveChill();
+    if (useChillRoom.getState().code !== code) joinChill(code);
   }, [code]);
 
-  // Back goes wherever they came from (a chat, Together); a shared link has nowhere to go back to.
+  // Back goes wherever they came from (a chat, Together) and keeps the room playing; a shared link has nowhere to go back to.
   const back = () => (loc.key !== 'default' ? nav(-1) : nav('/together'));
   const listeners = state?.listeners ?? [];
 
@@ -42,14 +45,19 @@ export default function ChillRoomPage() {
       {/* ---------- room ---------- */}
       <div className={view === 'room' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}>
         <header className="safe-top relative z-20 shrink-0 lg:border-b lg:border-line lg:bg-surface/80 lg:backdrop-blur">
-          <div className="flex h-16 items-center gap-3 px-3 lg:h-[72px] lg:px-6">
-            <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-ink shadow-sm lg:bg-primary-soft lg:shadow-none" onClick={back} aria-label="Back">
+          <div className="flex h-14 items-center gap-3 px-3 lg:h-[72px] lg:px-6">
+            <button className="grid h-10 w-10 shrink-0 lg:h-11 lg:w-11 place-items-center rounded-full bg-surface text-ink shadow-sm lg:bg-primary-soft lg:shadow-none" onClick={back} aria-label="Back">
               <Icon name="back" />
             </button>
             <div className="min-w-0 flex-1 text-center lg:text-left">
-              <h1 className="truncate text-[22px] leading-tight font-bold lg:text-2xl">Chill Room</h1>
-              <p className="flex items-center justify-center gap-1.5 truncate text-[13px] font-bold text-primary-strong lg:justify-start">
+              <h1 className="truncate text-xl leading-tight font-bold lg:text-2xl">Chill Room</h1>
+              <p className="flex items-center justify-center gap-1.5 truncate text-xs font-bold lg:text-[13px] text-primary-strong lg:justify-start">
                 <span className="h-2 w-2 shrink-0 rounded-full bg-[#3b82f6]" />
+                {state?.private && (
+                  <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary-soft px-1.5 text-[11px]">
+                    <Icon name="lock" size={11} /> Private
+                  </span>
+                )}
                 {listeners.length > 1 ? (
                   <>
                     <span className="lg:hidden">Synced with {listeners.length} listeners</span>
@@ -66,7 +74,7 @@ export default function ChillRoomPage() {
             <button className="btn btn-soft hidden h-11 lg:inline-flex" onClick={() => setPeople(true)}>
               <Icon name="userPlus" size={19} /> Invite
             </button>
-            <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface text-ink shadow-sm lg:hidden" onClick={() => setPeople(true)} aria-label="People and invites">
+            <button className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-surface text-ink shadow-sm lg:hidden" onClick={() => setPeople(true)} aria-label="People and invites">
               <Icon name="users" />
             </button>
           </div>
@@ -74,7 +82,9 @@ export default function ChillRoomPage() {
 
         <div className="flex min-h-0 flex-1 lg:grid lg:grid-cols-[minmax(0,1fr)_400px]">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <Stage state={state} playerHost={playerHost} yt={yt} />
+            <div className={typing ? 'max-lg:hidden' : ''}>
+              <Stage state={state} slotRef={slotRef} yt={yt} />
+            </div>
             <div className="hidden lg:block">
               <DesktopNow state={state} onSongs={() => setView('songs')} />
             </div>
@@ -83,9 +93,9 @@ export default function ChillRoomPage() {
               <PlayerBar state={state} yt={yt} />
             </div>
             {/* phone: now playing + chat on one white sheet */}
-            <section className="relative z-10 flex min-h-0 flex-1 flex-col rounded-t-[32px] bg-surface shadow-[0_-8px_30px_rgba(90,111,208,0.10)] lg:hidden">
-              <PhoneNow state={state} onSongs={() => setView('songs')} />
-              <RoomChat />
+            <section className="relative z-10 flex min-h-0 flex-1 flex-col rounded-t-[28px] bg-surface shadow-[0_-8px_30px_rgba(90,111,208,0.10)] lg:hidden">
+              {typing ? <PhoneNowMini state={state} yt={yt} /> : <PhoneNow state={state} onSongs={() => setView('songs')} />}
+              <RoomChat onTyping={setTyping} />
             </section>
           </div>
           <aside className="hidden min-h-0 flex-col rounded-tl-[32px] bg-surface shadow-[-8px_0_30px_rgba(90,111,208,0.08)] lg:flex">
@@ -131,8 +141,6 @@ export default function ChillRoomPage() {
   );
 }
 
-type Yt = ReturnType<typeof useChillPlayer>;
-
 /** Re-renders a few times a second so progress bars move. */
 function usePosition(state: ChillState | null) {
   const [, setTick] = useState(0);
@@ -146,8 +154,9 @@ function usePosition(state: ChillState | null) {
 
 // ---------------------------------------------------------------- covers
 
-function Stage({ state, playerHost, yt }: { state: ChillState | null; playerHost: React.RefObject<HTMLDivElement | null>; yt: Yt }) {
-  const [video, setVideo] = useState(false);
+function Stage({ state, slotRef, yt }: { state: ChillState | null; slotRef: (el: HTMLElement | null) => void; yt: Yt | null }) {
+  // The player itself lives in the app shell (so it survives leaving this screen); it lays itself over this card for the video.
+  const video = useChillAudio((s) => s.video);
   const item = currentItem(state);
   const slots = [-2, -1, 0, 1, 2].map((o) => ({ o, item: state?.queue[(state?.index ?? 0) + o] ?? null }));
 
@@ -164,10 +173,8 @@ function Stage({ state, playerHost, yt }: { state: ChillState | null; playerHost
         </div>
       ))}
 
-      {/* The live player sits in the middle card, under the cover unless someone wants the video. */}
       <div className="chill-card chill-front" style={{ '--o': 0, '--a': 0, zIndex: 20 } as React.CSSProperties}>
-        <div className="relative h-full w-full overflow-hidden rounded-[20px] bg-black">
-          <div ref={playerHost} className="pointer-events-none absolute inset-0 [&_iframe]:h-full [&_iframe]:w-full" />
+        <div ref={slotRef} className="relative h-full w-full overflow-hidden rounded-[20px] bg-black">
           <CoverArt
             src={item?.artwork}
             seed={item?.id ?? 'ph0'}
@@ -177,13 +184,13 @@ function Stage({ state, playerHost, yt }: { state: ChillState | null; playerHost
           {item && (
             <button
               className="absolute right-2 bottom-2 flex h-7 items-center gap-1 rounded-full bg-black/40 px-2.5 text-[11px] font-bold text-white backdrop-blur"
-              onClick={() => setVideo((v) => !v)}
+              onClick={() => useChillAudio.setState({ video: !video })}
               aria-pressed={video}
             >
               <Icon name={video ? 'image' : 'play'} size={12} /> {video ? 'Cover' : 'Video'}
             </button>
           )}
-          {yt.needsTap && state?.playing && (
+          {yt?.needsTap && state?.playing && (
             <button className="absolute inset-0 grid place-items-center bg-[#1b2148]/45 p-3 text-center text-white backdrop-blur-[2px]" onClick={yt.unlock}>
               <span className="grid justify-items-center gap-2">
                 <span className="grid h-14 w-14 place-items-center rounded-full bg-white text-primary-strong shadow-lg">
@@ -193,7 +200,7 @@ function Stage({ state, playerHost, yt }: { state: ChillState | null; playerHost
               </span>
             </button>
           )}
-          {yt.failed && <p className="absolute inset-x-2 bottom-10 rounded-xl bg-black/50 p-2 text-center text-xs font-bold text-white">Couldn’t load the player — check your connection</p>}
+          {yt?.failed && <p className="absolute inset-x-2 bottom-10 rounded-xl bg-black/50 p-2 text-center text-xs font-bold text-white">Couldn’t load the player — check your connection</p>}
         </div>
       </div>
     </div>
@@ -202,7 +209,7 @@ function Stage({ state, playerHost, yt }: { state: ChillState | null; playerHost
 
 // ---------------------------------------------------------------- now playing
 
-function Progress({ state, compact = false }: { state: ChillState | null; compact?: boolean }) {
+function Progress({ state, compact = false, dense = false }: { state: ChillState | null; compact?: boolean; dense?: boolean }) {
   const pos = usePosition(state);
   const item = currentItem(state);
   const dur = item?.durationMs ?? null;
@@ -214,7 +221,7 @@ function Progress({ state, compact = false }: { state: ChillState | null; compac
     setDrag(null);
   };
   return (
-    <div className={compact ? '' : 'mt-3'}>
+    <div className={compact ? '' : dense ? 'mt-1.5' : 'mt-3'}>
       <input
         type="range"
         className="chill-range w-full"
@@ -231,7 +238,7 @@ function Progress({ state, compact = false }: { state: ChillState | null; compac
         aria-label="Song position"
       />
       {!compact && (
-        <div className="mt-0.5 flex justify-between text-[13px] font-bold text-muted tabular-nums">
+        <div className={`flex justify-between font-bold text-muted tabular-nums ${dense ? '-mt-0.5 text-xs' : 'mt-0.5 text-[13px]'}`}>
           <span>{fmtTime(item ? shown : 0)}</span>
           <span>{fmtTime(dur)}</span>
         </div>
@@ -240,14 +247,14 @@ function Progress({ state, compact = false }: { state: ChillState | null; compac
   );
 }
 
-function Controls({ state, size = 64 }: { state: ChillState | null; size?: number }) {
+function Controls({ state, size = 64, gap = 'gap-7' }: { state: ChillState | null; size?: number; gap?: string }) {
   const item = currentItem(state);
   const playing = !!state?.playing;
   const hasNext = !!state && state.index < state.queue.length - 1;
   return (
-    <div className="flex items-center justify-center gap-7">
+    <div className={`flex items-center justify-center ${gap}`}>
       <button className="text-ink transition active:scale-90 disabled:opacity-30" onClick={() => chill.control('prev')} disabled={!item} aria-label="Previous song">
-        <Icon name="skipBack" size={30} />
+        <Icon name="skipBack" size={size < 56 ? 26 : 30} />
       </button>
       <button
         className="grid place-items-center rounded-full bg-gradient-to-b from-primary to-primary-strong text-white shadow-[0_10px_24px_rgba(90,111,208,0.45)] transition active:scale-95 disabled:opacity-50"
@@ -259,7 +266,7 @@ function Controls({ state, size = 64 }: { state: ChillState | null; size?: numbe
         <Icon name={playing ? 'pause' : 'play'} size={size * 0.42} />
       </button>
       <button className="text-ink transition active:scale-90 disabled:opacity-30" onClick={() => chill.control('next')} disabled={!hasNext} aria-label="Next song">
-        <Icon name="skipForward" size={30} />
+        <Icon name="skipForward" size={size < 56 ? 26 : 30} />
       </button>
     </div>
   );
@@ -283,18 +290,45 @@ function nowLabel(state: ChillState | null) {
 function PhoneNow({ state, onSongs }: { state: ChillState | null; onSongs: () => void }) {
   const { title, sub } = nowLabel(state);
   return (
-    <div className="shrink-0 border-b border-line px-5 pt-5 pb-3">
-      <div className="flex items-start gap-3">
+    <div className="shrink-0 border-b border-line px-5 pt-4 pb-2">
+      <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[26px] leading-tight font-bold">{title}</h2>
-          <p className="truncate text-muted">{sub}</p>
+          <h2 className="truncate text-[21px] leading-tight font-bold">{title}</h2>
+          <p className="truncate text-sm text-muted">{sub}</p>
         </div>
-        <SongsButton onClick={onSongs} />
+        <button className="btn btn-primary h-10 shrink-0 px-4 text-[15px]" onClick={onSongs}>
+          <Icon name="music" size={18} /> Songs
+        </button>
       </div>
-      <Progress state={state} />
-      <div className="mt-1">
-        <Controls state={state} />
+      <Progress state={state} dense />
+      <Controls state={state} size={48} gap="gap-10" />
+    </div>
+  );
+}
+
+/** One slim row while the keyboard is up: what's playing, and play / pause. */
+function PhoneNowMini({ state, yt }: { state: ChillState | null; yt: Yt | null }) {
+  const { title, sub } = nowLabel(state);
+  const item = currentItem(state);
+  const playing = !!state?.playing && !state.finished;
+  const tap = !!yt?.needsTap && playing;
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2.5">
+      <CoverArt src={item?.artwork} seed={item?.id ?? 'ph0'} className="h-10 w-10 shrink-0" rounded="rounded-xl" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] leading-tight font-bold">{title}</p>
+        <p className="truncate text-xs text-muted">{sub}</p>
       </div>
+      <button
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-b from-primary to-primary-strong text-white shadow-md transition active:scale-90 disabled:opacity-50"
+        // Keep the keyboard up: this sits right above the box being typed in.
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => (tap ? yt?.unlock() : chill.control(playing ? 'pause' : 'play'))}
+        disabled={!item}
+        aria-label={tap ? 'Listen in sync' : playing ? 'Pause for everyone' : 'Play for everyone'}
+      >
+        <Icon name={playing && !tap ? 'pause' : 'play'} size={18} />
+      </button>
     </div>
   );
 }
@@ -316,7 +350,7 @@ function DesktopNow({ state, onSongs }: { state: ChillState | null; onSongs: () 
   );
 }
 
-export function PlayerBar({ state, yt, onOpen }: { state: ChillState | null; yt?: Yt; onOpen?: () => void }) {
+export function PlayerBar({ state, yt, onOpen }: { state: ChillState | null; yt?: Yt | null; onOpen?: () => void }) {
   const item = currentItem(state);
   const pos = usePosition(state);
   return (
@@ -362,7 +396,7 @@ export function PlayerBar({ state, yt, onOpen }: { state: ChillState | null; yt?
 
 // ---------------------------------------------------------------- chat
 
-function RoomChat() {
+function RoomChat({ onTyping }: { onTyping?: (on: boolean) => void }) {
   const me = useAuth((s) => s.user)!;
   const lines = useChillRoom((s) => s.chat);
   const online = useChillRoom((s) => s.state?.listeners.length ?? 0);
@@ -374,6 +408,15 @@ function RoomChat() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines.length]);
 
+  // The list grows and shrinks as the keyboard opens and the covers fold away; stay pinned to the newest line.
+  useEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => (el.scrollTop = el.scrollHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   function send(e: FormEvent) {
     e.preventDefault();
     const t = text.trim();
@@ -384,8 +427,8 @@ function RoomChat() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-baseline justify-between px-5 pt-4 pb-1 lg:px-7 lg:pt-6">
-        <h2 className="text-xl font-bold lg:text-2xl">Room chat</h2>
+      <div className="flex shrink-0 items-baseline justify-between px-5 pt-3 pb-1 lg:px-7 lg:pt-6">
+        <h2 className="text-lg font-bold lg:text-2xl">Room chat</h2>
         <span className="text-sm font-bold text-muted">{online} online</span>
       </div>
       <div ref={list} className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-2 lg:px-6">
@@ -395,17 +438,22 @@ function RoomChat() {
           <ChatRow key={l.id} line={l} meId={me.id} grouped={i > 0 && lines[i - 1].kind === 'text' && l.kind === 'text' && lines[i - 1].user?.id === l.user?.id} />
         ))}
       </div>
-      <form onSubmit={send} className="safe-bottom shrink-0 px-3 pt-1 pb-3 lg:px-5">
-        <div className="flex items-center gap-2 rounded-full bg-primary-soft/70 p-1.5 pl-5">
+      <form onSubmit={send} className="safe-bottom shrink-0 px-3 pt-1 pb-2.5 lg:px-5 lg:pb-3">
+        <div className="chill-compose flex items-center gap-2 rounded-full bg-primary-soft/70 p-1.5 pl-5 ring-primary/35 transition focus-within:ring-2">
           <input
             className="min-w-0 flex-1 bg-transparent py-2 outline-none placeholder:text-faint"
             placeholder="Write a comment…"
             value={text}
             maxLength={300}
             onChange={(e) => setText(e.target.value)}
+            onFocus={() => onTyping?.(true)}
+            onBlur={() => onTyping?.(false)}
             enterKeyHint="send"
           />
-          <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-white shadow-md transition active:scale-90 disabled:opacity-50" disabled={!text.trim()} aria-label="Send">
+          <button
+            // Sending keeps the keyboard up, like any messenger.
+            onPointerDown={(e) => e.preventDefault()}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-white shadow-md transition active:scale-90 disabled:opacity-50" disabled={!text.trim()} aria-label="Send">
             <Icon name="send" size={20} />
           </button>
         </div>
@@ -466,6 +514,7 @@ function PeopleSheet({ open, onClose, state, code }: { open: boolean; onClose: (
     if (!confirm('Close this Chill Room for everyone?')) return;
     try {
       await api(`/chill/${code}/close`, { method: 'POST' });
+      leaveChill();
       nav('/together');
     } catch (e) {
       toast(errorText(e), 'error');
@@ -489,6 +538,18 @@ function PeopleSheet({ open, onClose, state, code }: { open: boolean; onClose: (
         ))}
       </div>
 
+      {isHost ? (
+        <div className="mt-3">
+          <PrivateToggle on={!!state?.private} onChange={(v) => chill.privacy(v)} />
+        </div>
+      ) : (
+        state?.private && (
+          <p className="mt-3 flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm font-semibold text-muted">
+            <Icon name="lock" size={16} /> This room is private — friends don’t see it live
+          </p>
+        )
+      )}
+
       <h3 className="mt-4 mb-1 text-xs font-bold tracking-wide text-faint uppercase">Invite friends</h3>
       <button className="btn btn-soft mb-2 w-full" onClick={async () => toast((await copyText(`${location.origin}/chill/${code}`)) ? 'Room link copied' : 'Couldn’t copy the link', 'info')}>
         <Icon name="link" size={19} /> Copy room link
@@ -504,8 +565,17 @@ function PeopleSheet({ open, onClose, state, code }: { open: boolean; onClose: (
           </div>
         ))}
       </div>
+      <button
+        className="btn btn-soft mt-4 w-full"
+        onClick={() => {
+          leaveChill();
+          nav('/together');
+        }}
+      >
+        <Icon name="logout" size={19} /> Leave the room
+      </button>
       {isHost && (
-        <button className="btn btn-danger mt-4 w-full" onClick={close}>
+        <button className="btn btn-danger mt-2 w-full" onClick={close}>
           <Icon name="door" size={19} /> Close the room for everyone
         </button>
       )}

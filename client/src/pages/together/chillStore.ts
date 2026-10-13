@@ -138,6 +138,10 @@ export const chill = {
   shuffle() {
     emit('chill:shuffle');
   },
+  /** Host only: hide the room from friends' "Live now" (or show it again). */
+  privacy(isPrivate: boolean) {
+    emit('chill:privacy', { private: isPrivate });
+  },
   say(text: string) {
     emit('chill:chat', { text });
   },

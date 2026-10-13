@@ -399,6 +399,7 @@ function Table({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
   const [landing, setLanding] = useState<Set<string>>(new Set());
   const [intro, setIntro] = useState<'shuffle' | 'deal' | null>(null);
   const [dealt, setDealt] = useState(0);
+  /** My card on its way to the pile: it lifts out of the hand until the server takes it. */
   const [hidden, setHidden] = useState<string | null>(null);
   const [shake, setShake] = useState<{ id: string; n: number } | null>(null);
   const [wildFor, setWildFor] = useState<UnoCard | null>(null);
@@ -412,7 +413,8 @@ function Table({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
     alive.current = true;
     return () => void (alive.current = false);
   }, []);
-  const later = (ms: number, fn: () => void) => void setTimeout(() => alive.current && fn(), ms);
+  // Zero-delay effects run right away, so a played card starts flying in the same frame it leaves the hand.
+  const later = (ms: number, fn: () => void) => (ms <= 0 ? alive.current && fn() : void setTimeout(() => alive.current && fn(), ms));
 
   // ---------- effects ----------
 
@@ -523,7 +525,8 @@ function Table({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
     }
   }
 
-  useEffect(() => {
+  // Before paint: the flight must replace the card that just left the hand without a blank frame between.
+  useLayoutEffect(() => {
     const last = seen.current ?? 0;
     const fresh = state.events.filter((e) => e.seq > last);
     if (!fresh.length) return;
@@ -761,7 +764,8 @@ function Table({ state, seen, onBack }: { state: UnoState; seen: MutableRefObjec
             cardW={cardW}
             myTurn={myTurn && !intro}
             playable={(c) => myTurn && !intro && canPlay(c, hand, top, state.color) && (!you?.drawnId || you.drawnId === c.id)}
-            hidden={hidden}
+            pending={hidden}
+            rects={tapRects.current}
             shake={shake}
             showUpTo={intro ? dealt : 99}
             anchorRef={anchor('hand')}
@@ -947,7 +951,9 @@ function Hand(p: {
   cardW: number;
   myTurn: boolean;
   playable: (c: UnoCard) => boolean;
-  hidden: string | null;
+  pending: string | null;
+  /** Where each card last sat on screen, so a played card can fly from exactly there. */
+  rects: Map<string, DOMRect>;
   shake: { id: string; n: number } | null;
   showUpTo: number;
   anchorRef: (el: HTMLElement | null) => void;
@@ -964,7 +970,7 @@ function Hand(p: {
     return () => ro.disconnect();
   }, []);
 
-  const cards = p.cards.filter((c) => c.id !== p.hidden).slice(0, p.showUpTo);
+  const cards = p.cards.slice(0, p.showUpTo);
   const n = cards.length;
   const w = p.cardW;
   const avail = Math.min(width, 900) - 64; // room for the tilt of the outer cards
@@ -972,6 +978,12 @@ function Hand(p: {
   const total = w + step * (n - 1);
   const left0 = (width - total) / 2;
   const spread = Math.min(4, 36 / Math.max(n, 1));
+  const els = useRef(new Map<string, HTMLElement>());
+
+  // Remember where every card is after each change (and once it settles), for the flight to the pile.
+  useLayoutEffect(() => {
+    for (const [id, el] of els.current) p.rects.set(id, el.getBoundingClientRect());
+  });
 
   return (
     <div
@@ -987,28 +999,34 @@ function Hand(p: {
         const ok = p.playable(c);
         const dim = p.myTurn && !ok;
         const shaking = p.shake?.id === c.id;
+        const leaving = p.pending === c.id;
+        // Position lives in the transform (not `left`) so the fan glides closed when a card leaves.
+        const lift = leaving ? -46 : ok ? -18 : 0;
         return (
           <button
             key={c.id}
-            className="group absolute bottom-6 rounded-[11%] transition-transform duration-200 hover:[--hov:-14px] focus-visible:[--hov:-14px]"
+            ref={(el) => void (el ? els.current.set(c.id, el) : els.current.delete(c.id))}
+            className="uno-hand-card group absolute bottom-6 left-0 rounded-[11%] hover:[--hov:-14px] focus-visible:[--hov:-14px]"
             style={{
-              left: left0 + i * step,
               width: w,
-              zIndex: i,
+              zIndex: leaving ? 50 : i,
               transformOrigin: '50% 120%',
-              transform: `translateY(calc(${Math.abs(rel) ** 1.6 * 1.6}px + ${ok ? -18 : 0}px + var(--hov, 0px))) rotate(${rel * spread}deg)`,
-              animation: p.showUpTo < 99 ? undefined : `uno-deal-in 0.4s ${i * 0.03}s cubic-bezier(.2,.8,.2,1) both`,
+              transform: `translateX(${left0 + i * step}px) translateY(calc(${Math.abs(rel) ** 1.6 * 1.6}px + ${lift}px + ${leaving ? '0px' : 'var(--hov, 0px)'})) rotate(${leaving ? 0 : rel * spread}deg) scale(${leaving ? 1.06 : 1})`,
+              pointerEvents: leaving ? 'none' : undefined,
             }}
+            onTransitionEnd={(e) => e.propertyName === 'transform' && p.rects.set(c.id, e.currentTarget.getBoundingClientRect())}
             onClick={(e) => p.onTap(c, e.currentTarget)}
             aria-label={`${label(c)}${ok ? ' — playable' : ''}`}
           >
-            <span key={shaking ? `s${p.shake!.n}` : 'still'} className={`block rounded-[11%] ${shaking ? 'uno-shake' : ''} ${ok ? 'uno-glow' : ''}`}>
-              <UnoCardFace
-                card={c}
-                w={w}
-                className="drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)] transition-[filter] duration-200"
-                style={{ filter: dim ? 'brightness(0.55) saturate(0.6)' : undefined }}
-              />
+            <span className="block" style={{ animation: p.showUpTo < 99 ? undefined : `uno-deal-in 0.4s ${i * 0.03}s cubic-bezier(.2,.8,.2,1) both` }}>
+              <span key={shaking ? `s${p.shake!.n}` : 'still'} className={`block rounded-[11%] ${shaking ? 'uno-shake' : ''} ${ok && !leaving ? 'uno-glow' : ''}`}>
+                <UnoCardFace
+                  card={c}
+                  w={w}
+                  className="drop-shadow-[0_6px_12px_rgba(0,0,0,0.35)] transition-[filter] duration-500 ease-out"
+                  style={{ filter: dim ? 'brightness(0.55) saturate(0.6)' : undefined }}
+                />
+              </span>
             </span>
           </button>
         );
@@ -1036,7 +1054,7 @@ function FlightView({ f, done }: { f: Flight; done: (id: number) => void }) {
         { transform: `translate(${(fx + tx) / 2}px, ${Math.min(fy, ty) - 50}px) scale(${Math.max(sFrom, sTo) * 1.08}) rotate(${spin / 2}deg)`, offset: 0.5 },
         { transform: `translate(${tx}px, ${ty}px) scale(${sTo}) rotate(${spin}deg)` },
       ],
-      { duration: 480, delay: f.delay, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'both' },
+      { duration: 560, delay: f.delay, easing: 'cubic-bezier(.25,.8,.25,1)', fill: 'both' },
     );
     a.onfinish = () => {
       f.onLand?.();

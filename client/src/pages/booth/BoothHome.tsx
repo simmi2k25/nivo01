@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { CoinButton } from '../../components/CoinStore';
 import { Icon } from '../../components/Icon';
+import { PrivateToggle } from '../../components/PrivateToggle';
 import { toast } from '../../components/Toast';
 import { api, errorText } from '../../lib/api';
 import { convTitle } from '../../lib/conv';
@@ -22,6 +23,7 @@ export default function BoothHome() {
   const [sendTo, setSendTo] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [isPrivate, setPrivate] = useState(false);
   const [mine, setMine] = useState<Room[]>([]);
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function BoothHome() {
     setBusy(true);
     try {
       const { room } = await api<{ room: Room }>('/rooms', {
-        body: { shots, countdown, ...(sendTo ? { conversationId: Number(sendTo) } : {}) },
+        body: { shots, countdown, private: isPrivate, ...(sendTo ? { conversationId: Number(sendTo) } : {}) },
       });
       nav(`/booth/${room.code}`);
     } catch (e) {
@@ -118,6 +120,9 @@ export default function BoothHome() {
               ))}
             </div>
           </Option>
+          <div className="mt-3">
+            <PrivateToggle on={isPrivate} onChange={setPrivate} />
+          </div>
           <div className="mt-3 rounded-[22px] border border-line p-3.5">
             <p className="flex items-center gap-3 font-bold">
               <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary">

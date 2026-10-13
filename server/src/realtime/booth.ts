@@ -17,6 +17,8 @@ type Session = {
   code: string;
   hostId: number;
   conversationId: number | null;
+  /** Hidden from friends' "Live now"; people still get in by link or invite. */
+  isPrivate: boolean;
   shots: number;
   countdown: number;
   participants: Map<number, Participant>;
@@ -32,7 +34,7 @@ const roomOf = (code: string) => `booth:${code}`;
 export function liveBooths() {
   return [...sessions.values()]
     .filter((s) => s.participants.size > 0)
-    .map((s) => ({ code: s.code, hostId: s.hostId, conversationId: s.conversationId, participants: liveParticipants(s.code) }));
+    .map((s) => ({ code: s.code, hostId: s.hostId, conversationId: s.conversationId, private: s.isPrivate, participants: liveParticipants(s.code) }));
 }
 
 export function liveParticipants(code: string) {
@@ -52,6 +54,7 @@ function stateOf(s: Session) {
   return {
     code: s.code,
     hostId: s.hostId,
+    private: s.isPrivate,
     controllerId: controllerId(s),
     shots: s.shots,
     countdown: s.countdown,
@@ -166,6 +169,7 @@ export function attachBooth(socket: Socket) {
           code,
           hostId: room.host_id,
           conversationId: room.conversation_id,
+          isPrivate: !!room.private,
           shots: room.shots,
           countdown: room.countdown,
           participants: new Map(),
@@ -231,6 +235,16 @@ export function attachBooth(socket: Socket) {
     await query('UPDATE booth_rooms SET shots = $2, countdown = $3 WHERE code = $1', [s.code, shots, countdown]).catch(
       () => {},
     );
+  });
+
+  // Only the host decides whether the booth shows up for friends.
+  socket.on('booth:privacy', (payload: { code?: string; private?: boolean }) => {
+    const s = sessionFor(payload?.code);
+    if (!s || s.hostId !== userId || typeof payload.private !== 'boolean' || payload.private === s.isPrivate) return;
+    s.isPrivate = payload.private;
+    broadcastState(s);
+    notifyTogether(s.hostId, s.conversationId);
+    query('UPDATE booth_rooms SET private = $2 WHERE code = $1', [s.code, s.isPrivate]).catch(() => {});
   });
 
   socket.on('booth:start', (payload: { code?: string }) => {
