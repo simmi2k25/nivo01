@@ -53,7 +53,7 @@ export default function ChipBoomPage() {
 
   return (
     <div className="chill-bg relative h-full overflow-hidden">
-      {state && (state.phase === 'lobby' ? <Lobby state={state} voice={voice} /> : <Game state={state} voice={voice} />)}
+      {state && (state.phase === 'lobby' ? <Lobby state={state} voice={voice} /> : state.phase === 'setup' ? <Setup state={state} voice={voice} /> : <Game state={state} voice={voice} />)}
       {state && <TableComments lobby={state.phase === 'lobby'} />}
       {status !== 'live' && (
         <div className="chill-bg absolute inset-0 z-30 grid place-items-center p-8 text-center">
@@ -299,8 +299,8 @@ function SideCard({ side, seat, meId, mine, canPick, onPick, wide, voice }: { si
 
 const STEPS: { title: string; short: string; long: string; tone: string }[] = [
   { title: 'Choose your side', short: 'Blue or pink grid.', long: 'One player uses the blue grid, the other the pink grid.', tone: 'bg-[#e6eaff] text-[#4553b8]' },
-  { title: 'Take turns', short: 'Tap a tile on your turn.', long: 'Each player flips one tile on their own grid per turn.', tone: 'bg-[#e6eaff] text-[#4553b8]' },
-  { title: 'Find safe chips', short: 'A tile hides a chip or a bomb.', long: 'A tile may reveal a chip or a bomb.', tone: 'bg-[#fff1c7] text-[#9a6a00]' },
+  { title: 'Hide the bombs', short: 'Secretly hide 6 on your friend’s board.', long: 'Each player secretly hides 6 bombs on the other player’s board.', tone: 'bg-[#ffe7ee] text-[#b3315e]' },
+  { title: 'Take turns', short: 'Flip a tile: chip or bomb?', long: 'Flip one tile on your own board per turn — a chip or one of their bombs.', tone: 'bg-[#fff1c7] text-[#9a6a00]' },
   { title: 'Avoid bombs', short: 'Each one costs a life.', long: 'Hitting a bomb costs you one of your lives.', tone: 'bg-[#ece8f8] text-[#4a4266]' },
   { title: 'Win', short: 'Most chips, or survive the longest.', long: 'Collect the chips first, or outlast your friend.', tone: 'bg-[#dff3e6] text-[#2e7550]' },
 ];
@@ -376,6 +376,196 @@ function InviteSheet({ open, onClose, code, stake }: { open: boolean; onClose: (
         ))}
       </div>
     </Sheet>
+  );
+}
+
+// ================================================================ setup: hide the bombs
+
+/** After both are ready: each player secretly hides bombs on the other player's board. */
+function Setup({ state, voice }: { state: CbState; voice: Voice }) {
+  const nav = useNavigate();
+  const wide = useDesktop();
+  const { mySide } = useMe(state);
+  useTick(true);
+  const theirs: CbSide = mySide ? other(mySide) : 'pink';
+  const friend = state[theirs];
+  const me = mySide ? state[mySide] : null;
+  const [spots, setSpots] = useState<number[]>(() => state.you?.placed ?? []);
+  const locked = !!me?.locked;
+  const full = spots.length >= state.bombs;
+  const send = useRef(0);
+
+  // The server is the source of truth (e.g. after a reconnect); follow it when it differs and we're idle.
+  useEffect(() => {
+    const server = state.you?.placed ?? [];
+    if (!send.current && server.join() !== spots.join()) setSpots(server);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.you?.placed]);
+
+  async function update(next: number[]) {
+    setSpots(next);
+    send.current++;
+    const err = await cb.place(next);
+    send.current--;
+    if (err) toast(err, 'error');
+  }
+  function toggle(i: number) {
+    if (locked) return;
+    if (spots.includes(i)) return update(spots.filter((x) => x !== i));
+    if (full) return toast(`That’s all ${state.bombs} — tap a bomb to move it`, 'info');
+    navigator.vibrate?.(15);
+    update([...spots, i]);
+  }
+  function random() {
+    const free = [...Array(16).keys()].filter((i) => !spots.includes(i));
+    const next = [...spots];
+    while (next.length < state.bombs) next.push(free.splice(Math.floor(Math.random() * free.length), 1)[0]);
+    update(next);
+  }
+  async function lockIn(on: boolean) {
+    const err = await cb.lock(on);
+    if (err) toast(err, 'error');
+  }
+  async function leave() {
+    if (!mySide) return nav('/together');
+    if (!confirm(`Leave now? ${friend?.user.displayName ?? 'Your friend'} wins the pot of ${coins(state.pot)}.`)) return;
+    await cb.leave().catch((e) => toast(errorText(e), 'error'));
+  }
+
+  if (!mySide) {
+    return (
+      <div className="grid h-full place-items-center p-8 text-center">
+        <div className="card grid max-w-sm justify-items-center gap-3 p-7">
+          <BombArt size={56} />
+          <h2 className="text-xl font-bold">Hiding the bombs…</h2>
+          <p className="text-sm text-muted">Both players are hiding bombs on each other’s board. The game starts in a moment.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const friendName = friend?.user.displayName ?? 'your friend';
+  return (
+    <div className="flex h-full flex-col">
+      <header className="safe-top flex shrink-0 items-center gap-3 px-3 pt-3 md:px-8 md:pt-6">
+        <BackButton label={wide ? 'Leave' : undefined} onClick={leave} />
+        <div className="min-w-0 flex-1 text-center">
+          <h1 className="truncate text-[20px] leading-tight font-bold md:text-[30px]">Hide the bombs</h1>
+          <p className="truncate text-xs text-muted md:text-base">Chip or Boom · {coins(state.stake)} each</p>
+        </div>
+        <VoiceButton voice={voice} />
+        <CommentButton onSend={cb.say} />
+      </header>
+
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+        <div className={`mx-auto max-w-[1100px] px-4 pt-4 pb-6 md:px-8 ${wide ? 'grid grid-cols-[minmax(0,1fr)_320px] items-start gap-8' : 'grid gap-4'}`}>
+          <section className={`cb-${theirs} cb-card relative rounded-[30px] p-4 md:rounded-[40px] md:p-7 ${locked ? '' : 'cb-turn-glow'}`}>
+            <div className="mb-3 flex items-center gap-3 md:mb-5">
+              <Mascot side={theirs} size={wide ? 64 : 48} />
+              <div className="min-w-0 flex-1">
+                <p className="cb-ink text-sm font-bold md:text-base">{friendName}’s board</p>
+                <p className="font-display text-[19px] leading-tight font-bold md:text-[24px]">{locked ? 'Your bombs are hidden' : `Tap ${state.bombs} tiles to hide your bombs`}</p>
+              </div>
+              <span key={spots.length} className="anim-pop flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 font-display text-[18px] font-bold shadow-sm dark:bg-surface">
+                <BombArt size={22} />
+                {spots.length}
+                <span className="text-muted">/ {state.bombs}</span>
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-2.5 md:gap-4">
+              {Array.from({ length: 16 }, (_, i) => {
+                const on = spots.includes(i);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`cb-tile grid aspect-square place-items-center ${on ? 'cb-tile-bomb' : 'cb-tile-hidden'} ${locked ? 'opacity-90' : ''}`}
+                    onClick={() => toggle(i)}
+                    disabled={locked}
+                    aria-pressed={on}
+                    aria-label={`Tile ${i + 1}${on ? ' — bomb hidden here' : ''}`}
+                  >
+                    {on && (
+                      <span key={`b${i}`} className="cb-pop grid h-full w-full place-items-center">
+                        <BombArt size={64} className="h-[58%] w-[58%]" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {!locked && (
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                <button className="rounded-full bg-white px-4 py-2 text-sm font-bold text-primary-strong shadow-sm transition active:scale-95 dark:bg-surface" onClick={random} disabled={full}>
+                  🎲 Random
+                </button>
+                <button className="rounded-full bg-white px-4 py-2 text-sm font-bold text-muted shadow-sm transition active:scale-95 disabled:opacity-50 dark:bg-surface" onClick={() => update([])} disabled={!spots.length}>
+                  Clear
+                </button>
+              </div>
+            )}
+          </section>
+
+          <div className="grid content-start gap-4">
+            <div className="flex items-center gap-3 rounded-[26px] bg-surface p-4 shadow-[var(--shadow-sm)]">
+              <TimerRing state={state} size={wide ? 120 : 56} side={theirs} label="to hide" />
+              <p className="min-w-0 flex-1 text-[15px] leading-snug text-muted">
+                {friendName} can’t see where you put them. Anything not hidden when time runs out is placed at random.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 rounded-[26px] bg-surface p-4 shadow-[var(--shadow-sm)]">
+              <Mascot side={theirs} size={44} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-bold">{friendName}</p>
+                <p className={`text-sm font-semibold ${friend?.locked ? 'text-[#2e7550] dark:text-[#8fdcae]' : 'text-muted'}`}>
+                  {friend?.locked ? 'Done — bombs hidden on your board ✓' : `Hiding bombs on your board… ${friend?.hidden ?? 0} / ${state.bombs}`}
+                </p>
+              </div>
+              {friend && <MicBadge voice={voice} userId={friend.user.id} />}
+            </div>
+            {wide && (
+              <div className="grid gap-2">
+                {locked ? (
+                  <>
+                    <button className={`cb-${theirs} cb-solid btn h-14 text-lg text-white opacity-90`} disabled>
+                      <span className="anim-spin h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+                      {friend?.locked ? 'Starting…' : `Waiting for ${friendName}`}
+                    </button>
+                    <button className="btn h-12 bg-surface text-primary-strong ring-2 ring-line" onClick={() => lockIn(false)}>
+                      Change my bombs
+                    </button>
+                  </>
+                ) : (
+                  <button className={`cb-${theirs} cb-solid btn h-14 text-lg text-white shadow-[0_14px_30px_var(--cb-glow)]`} disabled={!full} onClick={() => lockIn(true)}>
+                    {full ? 'Lock in bombs' : `Hide ${state.bombs - spots.length} more`}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {!wide && (
+        <div className="safe-bottom shrink-0 border-t border-line bg-surface/90 px-4 pt-3 pb-3 backdrop-blur">
+          {locked ? (
+            <div className="flex gap-3">
+              <button className="btn h-14 bg-surface px-5 text-[16px] text-primary-strong ring-2 ring-line" onClick={() => lockIn(false)}>
+                Change
+              </button>
+              <button className={`cb-${theirs} cb-solid btn h-14 flex-1 text-[16px] text-white opacity-90`} disabled>
+                <span className="anim-spin h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+                {friend?.locked ? 'Starting…' : `Waiting for ${friendName}`}
+              </button>
+            </div>
+          ) : (
+            <button className={`cb-${theirs} cb-solid btn h-14 w-full text-lg text-white shadow-[0_14px_30px_var(--cb-glow)]`} disabled={!full} onClick={() => lockIn(true)}>
+              {full ? 'Lock in bombs' : `Hide ${state.bombs - spots.length} more`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -469,6 +659,7 @@ function Game({ state, voice }: { state: CbState; voice: Voice }) {
       pending={side === mySide ? pending : null}
       fx={fx?.side === side ? fx : null}
       onTap={side === mySide && myTurn ? tap : undefined}
+      hidden={mySide && side !== mySide ? state.you?.placed : undefined}
     />
   );
 
@@ -575,15 +766,18 @@ function PotBadge({ pot, small = false }: { pot: number; small?: boolean }) {
   );
 }
 
-function TimerRing({ state, size }: { state: CbState; size: number }) {
-  const left = state.turnEndsAt ? Math.max(0, state.turnEndsAt - serverNow()) : 0;
-  const frac = state.turnEndsAt ? left / state.turnMs : 0;
-  const side = state.turn ?? 'blue';
+function TimerRing({ state, size, side: forSide, label = 'to pick' }: { state: CbState; size: number; side?: CbSide; label?: string }) {
+  const setup = state.phase === 'setup';
+  const endsAt = setup ? state.setupEndsAt : state.turnEndsAt;
+  const total = setup ? state.setupMs : state.turnMs;
+  const left = endsAt ? Math.max(0, endsAt - serverNow()) : 0;
+  const frac = endsAt ? left / total : 0;
+  const side = forSide ?? state.turn ?? 'blue';
   const stroke = size > 100 ? 14 : 6;
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const secs = Math.ceil(left / 1000);
-  const low = secs <= 5 && state.phase === 'playing';
+  const low = secs <= 5 && (state.phase === 'playing' || setup);
   return (
     <div className={`cb-${side} relative grid shrink-0 place-items-center`} style={{ width: size, height: size }}>
       <svg width={size} height={size} className="absolute inset-0 -rotate-90" aria-hidden="true">
@@ -607,9 +801,9 @@ function TimerRing({ state, size }: { state: CbState; size: number }) {
       >
         <span>
           <span className={`block font-display leading-none font-bold tabular-nums ${low ? 'text-danger' : ''}`} style={{ fontSize: size > 100 ? 46 : 17 }}>
-            {size > 100 ? `0:${String(secs).padStart(2, '0')}` : secs}
+            {size > 100 ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : secs}
           </span>
-          {size > 100 && <span className="mt-1 block text-muted">to pick</span>}
+          {size > 100 && <span className="mt-1 block text-muted">{label}</span>}
         </span>
       </span>
     </div>
@@ -645,7 +839,7 @@ function QuickRules({ lives, target }: { lives: number; target: number }) {
       <h2 className="text-[19px] font-bold">Quick rules</h2>
       <ul className="mt-3 grid gap-3">
         {row(<ChipArt size={28} />, 'Safe chip', 'Adds 1 to your score')}
-        {row(<BombArt size={28} />, 'Boom', `Lose one of your ${lives} lives`)}
+        {row(<BombArt size={28} />, 'Boom', `Your friend hid it — lose one of your ${lives} lives`)}
         {row(<Icon name="star" size={22} className="text-[#2e7550]" />, 'Win', `First to ${target} chips, or last one with lives`)}
       </ul>
     </section>
@@ -673,7 +867,7 @@ function Hearts({ lives, max, size = 22 }: { lives: number; max: number; size?: 
   );
 }
 
-function Board(p: { side: CbSide; seat: CbSeat | null; state: CbState; voice: Voice; isMe: boolean; compact: boolean; pending: number | null; fx: Fx | null; onTap?: (i: number) => void }) {
+function Board(p: { side: CbSide; seat: CbSeat | null; state: CbState; voice: Voice; isMe: boolean; compact: boolean; pending: number | null; fx: Fx | null; onTap?: (i: number) => void; hidden?: number[] }) {
   const { side, seat, state, compact } = p;
   const active = state.phase === 'playing' && state.turn === side;
   const name = p.isMe ? 'You' : (seat?.user.displayName ?? 'Open seat');
@@ -721,7 +915,7 @@ function Board(p: { side: CbSide; seat: CbSeat | null; state: CbState; voice: Vo
   const grid = (
     <div key={shakeKey} className={`grid grid-cols-4 ${compact ? 'gap-1.5' : 'gap-2.5 md:gap-4'} ${shakeKey ? 'cb-shake' : ''}`}>
       {tiles.map((t, i) => (
-        <Tile key={i} tile={t} index={i} compact={compact} pending={p.pending === i} fx={p.fx?.index === i ? p.fx : null} onTap={p.onTap} />
+        <Tile key={i} tile={t} index={i} compact={compact} pending={p.pending === i} fx={p.fx?.index === i ? p.fx : null} onTap={p.onTap} mine={!!p.hidden?.includes(i)} />
       ))}
     </div>
   );
@@ -756,7 +950,7 @@ function Board(p: { side: CbSide; seat: CbSeat | null; state: CbState; voice: Vo
   );
 }
 
-function Tile({ tile, index, compact, pending, fx, onTap }: { tile: CbTile | null; index: number; compact: boolean; pending: boolean; fx: Fx | null; onTap?: (i: number) => void }) {
+function Tile({ tile, index, compact, pending, fx, onTap, mine = false }: { tile: CbTile | null; index: number; compact: boolean; pending: boolean; fx: Fx | null; onTap?: (i: number) => void; mine?: boolean }) {
   // Animate only a flip we saw happen — not tiles that were already face up when the screen opened.
   const was = useRef(tile);
   const flipped = was.current === null && tile !== null;
@@ -775,9 +969,10 @@ function Tile({ tile, index, compact, pending, fx, onTap }: { tile: CbTile | nul
         className={`cb-tile cb-tile-hidden grid aspect-square place-items-center font-display font-bold ${compact ? 'text-[15px]' : 'text-[30px] md:text-[44px]'} ${pending ? 'cb-tile-pending' : ''}`}
         disabled={!onTap}
         onClick={() => onTap?.(index)}
-        aria-label={`Tile ${index + 1}, face down`}
+        aria-label={`Tile ${index + 1}, face down${mine ? ' — you hid a bomb here' : ''}`}
       >
-        ?
+        {/* On your friend's board you can see where your own bombs are waiting for them. */}
+        {mine ? <BombArt size={compact ? 18 : 48} className={`opacity-40 ${compact ? '' : 'h-[48%] w-[48%]'}`} /> : '?'}
       </button>
     );
   }

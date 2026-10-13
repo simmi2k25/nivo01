@@ -38,7 +38,7 @@ export default function TogetherHome() {
 
   return (
     <div className="chill-bg relative h-full overflow-hidden">
-      <div className="scroll-thin relative mx-auto h-full max-w-6xl overflow-y-auto px-4 pb-32 md:px-10 md:pb-10">
+      <div className="scroll-thin relative mx-auto h-full max-w-6xl overflow-x-hidden overflow-y-auto px-4 pb-32 md:px-10 md:pb-10">
         <header className="safe-top flex items-start gap-4 pt-6 md:pt-12">
           <div className="min-w-0 flex-1">
             <h1 className="text-[40px] leading-[1.05] font-bold md:text-[52px]">Together</h1>
@@ -52,7 +52,7 @@ export default function TogetherHome() {
         <CardsHero onCreate={() => setDealing(true)} onJoin={() => setJoining(true)} />
 
         {/* The four activities share one card colour; only their buttons carry each one's accent. */}
-        <div className="mt-4 grid gap-4 md:mt-5 md:grid-cols-2 md:gap-5">
+        <div className="mt-4 grid grid-cols-1 gap-4 md:mt-5 md:grid-cols-2 md:gap-5">
           <ActivityRow
             art={<ActivityIcon name="booth" />}
             title="Photobooth"
@@ -92,7 +92,7 @@ export default function TogetherHome() {
         {loaded && live === 0 && (
           <p className="rounded-[24px] bg-surface/70 p-5 text-center text-muted">No one’s hanging out right now — open a table and invite friends.</p>
         )}
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {games.map((g) => (
             <LiveRow
               key={g.code}
@@ -108,7 +108,7 @@ export default function TogetherHome() {
               key={g.code}
               art={g.host ? <Avatar user={g.host} size={58} /> : <Tile icon="cards" />}
               title={`${whose(g.host)} Chip or Boom`}
-              text={g.phase === 'lobby' ? `Chip or Boom · ${g.players.length} of 2 · ${g.stake} coins each` : 'Chip or Boom · playing now'}
+              text={g.phase === 'lobby' ? `Chip or Boom · ${g.players.length} of 2 · ${g.stake} ${g.stake === 1 ? 'coin' : 'coins'} each` : 'Chip or Boom · playing now'}
               cta={g.phase === 'lobby' && g.players.length < 2 ? 'Join' : 'Watch'}
               onClick={() => nav(`/chipboom/${g.code}`)}
             />
@@ -118,7 +118,7 @@ export default function TogetherHome() {
               key={g.code}
               art={g.host ? <Avatar user={g.host} size={58} /> : <Tile icon="cards" />}
               title={`${whose(g.host)} Guess the number`}
-              text={g.phase === 'lobby' ? `Guess the number · ${g.players.length} of 4 · ${g.stake} coins each` : 'Guess the number · playing now'}
+              text={g.phase === 'lobby' ? `Guess the number · ${g.players.length} of 4 · ${g.stake} ${g.stake === 1 ? 'coin' : 'coins'} each` : 'Guess the number · playing now'}
               cta={g.phase === 'lobby' && g.players.length < 4 ? 'Join' : 'Watch'}
               onClick={() => nav(`/guess/${g.code}`)}
             />
@@ -233,10 +233,10 @@ function ActivityRow(p: {
   disabled?: boolean;
 }) {
   return (
-    <section className="anim-rise flex items-center gap-4 rounded-[28px] bg-surface p-4 shadow-[var(--shadow-sm)] md:gap-5 md:p-6">
+    <section className="anim-rise flex min-w-0 items-center gap-3 rounded-[28px] bg-surface p-3.5 shadow-[var(--shadow-sm)] min-[400px]:gap-4 min-[400px]:p-4 md:gap-5 md:p-6">
       <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[20px] bg-primary-soft text-primary-strong md:h-[68px] md:w-[68px]">{p.art}</span>
       <span className="min-w-0 flex-1">
-        <span className="block font-display text-[22px] leading-tight font-bold md:text-[26px]">{p.title}</span>
+        <span className="block font-display text-[20px] leading-tight font-bold break-words min-[400px]:text-[22px] md:text-[26px]">{p.title}</span>
         <span className="block leading-snug text-muted">
           <span className="md:hidden">{p.text[0]}</span>
           <span className="hidden md:inline">{p.text[1]}</span>
@@ -244,7 +244,7 @@ function ActivityRow(p: {
       </span>
       {/* One button style for every activity, so the row reads as a set. */}
       <button
-        className="btn h-12 w-[92px] shrink-0 bg-gradient-to-r from-[#5b6ad8] to-[#7a82e6] px-0 text-[16px] text-white shadow-[0_10px_22px_rgba(86,105,210,0.35)] disabled:opacity-55 disabled:shadow-none md:h-14 md:w-[156px] md:text-lg"
+        className="btn h-12 w-[84px] shrink-0 bg-gradient-to-r from-[#5b6ad8] to-[#7a82e6] px-0 text-[16px] text-white shadow-[0_10px_22px_rgba(86,105,210,0.35)] disabled:opacity-55 disabled:shadow-none min-[400px]:w-[92px] md:h-14 md:w-[156px] md:text-lg"
         onClick={p.onClick}
         disabled={p.disabled}
       >
@@ -290,14 +290,14 @@ function RoomArt({ r }: { r: LiveChill }) {
 
 function LiveRow(p: { art: ReactNode; title: string; text: string; cta: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <div className="flex items-center gap-3.5 rounded-[26px] bg-surface p-3.5 pr-4 shadow-[var(--shadow-sm)]">
+    <div className="flex min-w-0 items-center gap-3 rounded-[26px] bg-surface p-3.5 pr-3.5 shadow-[var(--shadow-sm)] min-[400px]:gap-3.5 min-[400px]:pr-4">
       <span className="shrink-0">{p.art}</span>
       <span className="min-w-0 flex-1">
         <span className="block truncate font-display text-[18px] font-semibold">{p.title}</span>
         <span className="block truncate text-muted">{p.text}</span>
       </span>
       <button
-        className="h-12 shrink-0 rounded-full bg-surface px-6 font-display text-[17px] font-semibold text-primary-strong ring-2 ring-line transition hover:bg-primary-soft active:scale-95 disabled:opacity-50"
+        className="h-11 shrink-0 rounded-full bg-surface px-5 font-display text-[16px] min-[400px]:h-12 min-[400px]:px-6 min-[400px]:text-[17px] font-semibold text-primary-strong ring-2 ring-line transition hover:bg-primary-soft active:scale-95 disabled:opacity-50"
         onClick={p.onClick}
         disabled={p.disabled}
       >

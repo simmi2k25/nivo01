@@ -216,14 +216,14 @@ export type LiveUno = {
 
 export type CbSide = 'blue' | 'pink';
 export type CbTile = 'chip' | 'bomb';
-export type CbSeat = { user: UnoPerson; ready: boolean; online: boolean; chips: number; lives: number; tiles: (CbTile | null)[] };
-export type CbEvent = { seq: number; type: 'reveal' | 'timeout' | 'forfeit' | 'win' | 'start'; by?: number; side?: CbSide; index?: number; tile?: CbTile; amount?: number };
+export type CbSeat = { user: UnoPerson; ready: boolean; online: boolean; chips: number; lives: number; tiles: (CbTile | null)[]; hidden: number; locked: boolean };
+export type CbEvent = { seq: number; type: 'reveal' | 'timeout' | 'forfeit' | 'win' | 'start' | 'setup'; by?: number; side?: CbSide; index?: number; tile?: CbTile; amount?: number };
 export type CbState = {
   code: string;
   hostId: number;
   conversationId: number | null;
   stake: number;
-  phase: 'lobby' | 'playing' | 'finished' | 'closed';
+  phase: 'lobby' | 'setup' | 'playing' | 'finished' | 'closed';
   pot: number;
   target: number;
   lives: number;
@@ -233,6 +233,12 @@ export type CbState = {
   round: number;
   turnEndsAt: number | null;
   turnMs: number;
+  setupEndsAt: number | null;
+  setupMs: number;
+  /** Bombs each player hides on the other's board. */
+  bombs: number;
+  /** Where you hid bombs on your friend's board (only ever sent to you). */
+  you: { side: CbSide; placed: number[] } | null;
   winnerId: number | null;
   payout: number;
   events: CbEvent[];

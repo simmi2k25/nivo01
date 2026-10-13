@@ -10,10 +10,11 @@ import { getIo } from './hub.js';
 import { registerVoiceGame } from './voice.js';
 
 /**
- * Chip or Boom. Two players, a blue grid and a pink grid of 16 face-down tiles each: most hide a chip,
- * some hide a bomb. Players take turns flipping one tile on their own grid; a chip scores, a bomb costs
- * a life. First to 8 chips — or the last one with lives left — takes the pot. The server deals the
- * grids and never sends a tile before it's flipped, so nobody can peek.
+ * Chip or Boom. Two players, a blue grid and a pink grid of 16 face-down tiles each. Once both are ready,
+ * each player secretly hides 6 bombs on the *other* player's grid (the rest are chips); then they take turns
+ * flipping one tile on their own grid: a chip scores, a bomb costs a life. First to 8 chips — or the last one
+ * with lives left — takes the pot. The server keeps the boards and never sends a tile before it's flipped;
+ * where you hid bombs goes only to you.
  */
 
 export const CB_CODE = z
@@ -29,6 +30,8 @@ const BOMBS = 6;
 export const TARGET = 8;
 export const LIVES = 3;
 const TURN_MS = 20_000;
+/** Time to hide your bombs on your friend's board; anything left is placed at random. */
+const SETUP_MS = 45_000;
 /** Turns timed out in a row before a player is counted as gone. */
 const MAX_MISSED = 3;
 const LOBBY_TTL_MS = 30 * 60_000;
@@ -53,11 +56,14 @@ type Seat = {
   chips: number;
   lives: number;
   missed: number;
+  /** Tiles where this player hid bombs on the other player's grid (setup). */
+  placed: number[];
+  locked: boolean;
 };
 
 export type CbEvent = {
   seq: number;
-  type: 'reveal' | 'timeout' | 'forfeit' | 'win' | 'start';
+  type: 'reveal' | 'timeout' | 'forfeit' | 'win' | 'start' | 'setup';
   by?: number;
   side?: Side;
   index?: number;
@@ -65,7 +71,7 @@ export type CbEvent = {
   amount?: number;
 };
 
-type Phase = 'lobby' | 'playing' | 'finished' | 'closed';
+type Phase = 'lobby' | 'setup' | 'playing' | 'finished' | 'closed';
 
 type Game = {
   id: number;
@@ -82,6 +88,7 @@ type Game = {
   first: Side;
   round: number;
   turnEndsAt: number;
+  setupEndsAt: number;
   winnerId: number | null;
   payout: number;
   events: CbEvent[];
@@ -102,18 +109,29 @@ const seated = (g: Game) => SIDES.map((s) => g.seats[s]).filter((s): s is Seat =
 const potOf = (g: Game) => seated(g).filter((s) => s.ready).length * g.stake;
 const isWatching = (g: Game, userId: number) => [...g.watchers.values()].includes(userId);
 
-function newGrid(): Tile[] {
-  const tiles: Tile[] = [...Array(TILES - BOMBS).fill('chip'), ...Array(BOMBS).fill('bomb')];
-  for (let i = tiles.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(i + 1);
-    [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
-  }
-  return tiles;
+/** The rest of the bombs, at random, for anyone who ran out of setup time. */
+function fillBombs(placed: number[]) {
+  const free = [...Array(TILES).keys()].filter((i) => !placed.includes(i));
+  while (placed.length < BOMBS) placed.push(free.splice(crypto.randomInt(free.length), 1)[0]);
+  return placed;
 }
 
-const emptySeat = (user: Person): Seat => ({ userId: user.id, user, ready: false, grid: [], revealed: Array(TILES).fill(false), chips: 0, lives: LIVES, missed: 0 });
+const gridFrom = (bombs: number[]): Tile[] => [...Array(TILES).keys()].map((i) => (bombs.includes(i) ? 'bomb' : 'chip'));
 
-// ---------- state sent to phones (the same for everyone: unflipped tiles stay secret from all) ----------
+const emptySeat = (user: Person): Seat => ({
+  userId: user.id,
+  user,
+  ready: false,
+  grid: [],
+  revealed: Array(TILES).fill(false),
+  chips: 0,
+  lives: LIVES,
+  missed: 0,
+  placed: [],
+  locked: false,
+});
+
+// ---------- state sent to phones: unflipped tiles stay secret from everyone; where you hid bombs goes only to you ----------
 
 function seatState(g: Game, s: Seat | null) {
   if (!s) return null;
@@ -124,11 +142,15 @@ function seatState(g: Game, s: Seat | null) {
     chips: s.chips,
     lives: s.lives,
     tiles: s.revealed.map((r, i) => (r ? s.grid[i] : null)),
+    /** Setup progress: how many bombs they've hidden on their friend's board, and whether they've locked in. */
+    hidden: s.placed.length,
+    locked: s.locked,
   };
 }
 
-function stateOf(g: Game) {
+function stateOf(g: Game, userId: number | null = null) {
   const playing = g.phase === 'playing';
+  const mine = userId != null ? sideOf(g, userId) : null;
   return {
     code: g.code,
     hostId: g.hostId,
@@ -144,6 +166,11 @@ function stateOf(g: Game) {
     round: g.round,
     turnEndsAt: playing ? g.turnEndsAt : null,
     turnMs: TURN_MS,
+    setupEndsAt: g.phase === 'setup' ? g.setupEndsAt : null,
+    setupMs: SETUP_MS,
+    bombs: BOMBS,
+    // Your own bomb spots on your friend's board — never sent to them.
+    you: mine ? { side: mine, placed: g.seats[mine]!.placed } : null,
     winnerId: g.winnerId,
     payout: g.payout,
     events: g.events,
@@ -151,8 +178,10 @@ function stateOf(g: Game) {
   };
 }
 
+/** Each phone gets its own copy, so bomb spots only reach the player who hid them. */
 function broadcast(g: Game) {
-  getIo().to(roomOf(g.code)).emit('cb:state', stateOf(g));
+  const io = getIo();
+  for (const [socketId, userId] of g.watchers) io.sockets.sockets.get(socketId)?.emit('cb:state', stateOf(g, userId));
   scheduleLive(g);
 }
 
@@ -177,8 +206,8 @@ function clearTimers(g: Game) {
 /** Tables friends can see on the Together tab. */
 export function liveChipBoomTables() {
   return [...games.values()]
-    .filter((g) => g.phase === 'lobby' || g.phase === 'playing')
-    .map((g) => ({ code: g.code, hostId: g.hostId, conversationId: g.conversationId, phase: g.phase, players: seated(g).map((s) => s.user), stake: g.stake, pot: potOf(g) }));
+    .filter((g) => g.phase === 'lobby' || g.phase === 'setup' || g.phase === 'playing')
+    .map((g) => ({ code: g.code, hostId: g.hostId, conversationId: g.conversationId, phase: g.phase === 'lobby' ? 'lobby' : 'playing', players: seated(g).map((s) => s.user), stake: g.stake, pot: potOf(g) }));
 }
 
 // ---------- coins ----------
@@ -235,6 +264,7 @@ export async function createTable(userId: number, opts: { stake: number; convers
     first: 'blue',
     round: 0,
     turnEndsAt: 0,
+    setupEndsAt: 0,
     winnerId: null,
     payout: 0,
     events: [],
@@ -307,7 +337,7 @@ async function ready(g: Game, userId: number): Promise<string | null> {
     return 'The table changed while you were getting ready — your coins are back';
   }
   seat.ready = true;
-  if (g.seats.blue?.ready && g.seats.pink?.ready) startGame(g);
+  if (g.seats.blue?.ready && g.seats.pink?.ready) startSetup(g);
   return null;
 }
 
@@ -330,7 +360,7 @@ export async function leaveTable(code: string, userId: number) {
     g.seats[side] = null;
     broadcast(g);
     if (wasReady) await refund(g.id, code, [userId]);
-  } else if (g.phase === 'playing') {
+  } else if (g.phase === 'setup' || g.phase === 'playing') {
     forfeit(g, side);
     broadcast(g);
   }
@@ -353,18 +383,64 @@ export async function closeTable(g: Game, reason: string) {
   notifyTogether(g.hostId, g.conversationId);
 }
 
+// ---------- setup: hide bombs on your friend's board ----------
+
+function startSetup(g: Game) {
+  g.phase = 'setup';
+  for (const s of seated(g)) Object.assign(s, { placed: [], locked: false });
+  g.setupEndsAt = Date.now() + SETUP_MS;
+  push(g, { type: 'setup' });
+  if (g.expireTimer) clearTimeout(g.expireTimer);
+  g.expireTimer = null;
+  if (g.turnTimer) clearTimeout(g.turnTimer);
+  // Out of time: whatever's missing is hidden at random and the game begins.
+  g.turnTimer = setTimeout(() => {
+    if (g.phase !== 'setup') return;
+    for (const s of seated(g)) {
+      fillBombs(s.placed);
+      s.locked = true;
+    }
+    startGame(g);
+    broadcast(g);
+  }, SETUP_MS);
+  query(`UPDATE cb_tables SET status = 'playing' WHERE id = $1`, [g.id]).catch((e) => console.error('[chipboom] setup save failed', e.message));
+}
+
+/** Where you're hiding bombs (the whole set each time, so taps and "Random" are one message). */
+function place(g: Game, side: Side, raw: unknown): string | null {
+  const seat = g.seats[side]!;
+  if (g.phase !== 'setup') return 'Bombs are hidden before the game starts';
+  if (seat.locked) return 'Tap “Change” to move your bombs';
+  if (!Array.isArray(raw)) return 'Pick tiles for your bombs';
+  const spots = [...new Set(raw)];
+  if (spots.some((i) => !Number.isInteger(i) || i < 0 || i >= TILES)) return 'Pick tiles on the board';
+  if (spots.length > BOMBS) return `Hide exactly ${BOMBS} bombs`;
+  seat.placed = spots as number[];
+  return null;
+}
+
+function lock(g: Game, side: Side, locked: unknown): string | null {
+  const seat = g.seats[side]!;
+  if (g.phase !== 'setup') return null;
+  if (locked !== false && seat.placed.length !== BOMBS) return `Hide all ${BOMBS} bombs first`;
+  seat.locked = locked !== false;
+  if (g.seats.blue?.locked && g.seats.pink?.locked) startGame(g);
+  return null;
+}
+
 // ---------- the game ----------
 
 function startGame(g: Game) {
   g.phase = 'playing';
-  for (const s of seated(g)) Object.assign(s, { grid: newGrid(), revealed: Array(TILES).fill(false), chips: 0, lives: LIVES, missed: 0 });
+  // Your board holds the bombs your friend hid on it.
+  for (const side of SIDES) {
+    const s = g.seats[side]!;
+    Object.assign(s, { grid: gridFrom(g.seats[other(side)]!.placed), revealed: Array(TILES).fill(false), chips: 0, lives: LIVES, missed: 0 });
+  }
   g.first = SIDES[crypto.randomInt(2)];
   g.round = 1;
   push(g, { type: 'start', side: g.first });
   startTurn(g, g.first);
-  if (g.expireTimer) clearTimeout(g.expireTimer);
-  g.expireTimer = null;
-  query(`UPDATE cb_tables SET status = 'playing' WHERE id = $1`, [g.id]).catch((e) => console.error('[chipboom] start save failed', e.message));
 }
 
 function startTurn(g: Game, side: Side) {
@@ -486,7 +562,7 @@ export function attachChipBoom(socket: Socket) {
     g.watchers.set(socket.id, userId);
     watching.add(g.code);
     await socket.join(roomOf(g.code));
-    ack({ ok: true, state: stateOf(g) });
+    ack({ ok: true, state: stateOf(g, userId) });
     broadcast(g); // others see you come online
   });
 
@@ -513,6 +589,20 @@ export function attachChipBoom(socket: Socket) {
   lobby('cb:side', (g, p) => (SIDES.includes(p.side as Side) ? chooseSide(g, userId, p.side as Side) : Promise.resolve('Pick blue or pink')));
   lobby('cb:ready', (g) => ready(g, userId));
   lobby('cb:unready', (g) => unready(g, userId));
+
+  /** Setup moves: where your bombs go on your friend's board, then lock them in (or unlock to change). */
+  const setup = (name: string, fn: (g: Game, side: Side, p: Record<string, unknown>) => string | null) =>
+    socket.on(name, (payload: Record<string, unknown>, ackFn: unknown) => {
+      const ack = safeAck(ackFn);
+      const g = gameFor(payload?.code);
+      const side = g && sideOf(g, userId);
+      if (!g || !side) return ack({ error: 'You’re not playing in this game' });
+      const err = fn(g, side, payload ?? {});
+      broadcast(g);
+      ack(err ? { error: err } : { ok: true });
+    });
+  setup('cb:place', (g, side, p) => place(g, side, p.spots));
+  setup('cb:lock', (g, side, p) => lock(g, side, p.locked));
 
   socket.on('cb:reveal', (payload: { code?: string; index?: unknown }, ackFn: unknown) => {
     const ack = safeAck(ackFn);

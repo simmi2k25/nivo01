@@ -114,6 +114,9 @@ export const cb = {
   ready: () => move('cb:ready', {}, 15_000),
   unready: () => move('cb:unready', {}, 15_000),
   reveal: (index: number) => move('cb:reveal', { index }),
+  /** Setup: the full set of tiles where you're hiding bombs on your friend's board. */
+  place: (spots: number[]) => move('cb:place', { spots }),
+  lock: (locked: boolean) => move('cb:lock', { locked }),
   react: (stickerId: string) => getSocket()?.emit('cb:react', { code: get().code, stickerId }),
   say: (text: string) => getSocket()?.emit('cb:say', { code: get().code, text }),
   leave: () => api(`/chipboom/${get().code}/leave`, { body: {} }),
